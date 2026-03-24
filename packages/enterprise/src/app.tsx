@@ -6,9 +6,7 @@ import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { I18nProvider, type UiI18nParams } from "@opencode-ai/ui/context"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
-import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { createEffect, createMemo, Suspense, type ParentProps } from "solid-js"
-import { getRequestEvent } from "solid-js/web"
 import "./app.css"
 import { Favicon } from "@opencode-ai/ui/favicon"
 
@@ -21,45 +19,10 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
   })
 }
 
-function detectLocaleFromHeader(header: string | null | undefined) {
-  if (!header) return
-  for (const item of header.split(",")) {
-    const value = item.trim().split(";")[0]?.toLowerCase()
-    if (!value) continue
-    if (value.startsWith("zh")) return "zh" as const
-    if (value.startsWith("en")) return "en" as const
-  }
-}
-
-function detectLocale() {
-  const event = getRequestEvent()
-  const header = event?.request.headers.get("accept-language")
-  const headerLocale = detectLocaleFromHeader(header)
-  if (headerLocale) return headerLocale
-
-  if (typeof document === "object") {
-    const value = document.documentElement.lang?.toLowerCase() ?? ""
-    if (value.startsWith("zh")) return "zh" as const
-    if (value.startsWith("en")) return "en" as const
-  }
-
-  if (typeof navigator === "object") {
-    const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
-    for (const language of languages) {
-      if (!language) continue
-      if (language.toLowerCase().startsWith("zh")) return "zh" as const
-    }
-  }
-
-  return "en" as const
-}
-
 function UiI18nBridge(props: ParentProps) {
-  const locale = createMemo(() => detectLocale())
-  const zh = uiZh as Partial<Record<string, string>>
+  const locale = createMemo(() => "en" as const)
   const t = (key: keyof typeof uiEn, params?: UiI18nParams) => {
-    const value = locale() === "zh" ? (zh[key] ?? uiEn[key]) : uiEn[key]
-    const text = value ?? String(key)
+    const text = uiEn[key] ?? String(key)
     return resolveTemplate(text, params)
   }
 

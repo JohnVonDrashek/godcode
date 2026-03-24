@@ -44,19 +44,20 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     createEffect(() => {
       if (typeof document !== "object") return
-      document.documentElement.lang = localeTag(store.locale)
-      document.documentElement.dir = localeDir(store.locale)
-      document.documentElement.dataset.locale = store.locale
+      const loc = store.locale as Locale
+      document.documentElement.lang = localeTag(loc)
+      document.documentElement.dir = localeDir(loc)
+      document.documentElement.dataset.locale = loc
     })
 
     return {
-      locale: () => store.locale,
+      locale: () => store.locale as Locale,
       locales: LOCALES,
       label: localeLabel,
       tag: localeTag,
       dir: localeDir,
       route(pathname: string) {
-        return localeRoute(store.locale, pathname)
+        return localeRoute(store.locale as Locale, pathname)
       },
       setLocale(next: Locale) {
         setStore("locale", next)
