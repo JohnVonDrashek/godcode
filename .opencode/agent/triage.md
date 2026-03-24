@@ -32,15 +32,6 @@ Performance-related issues:
 
 **Only** add if it's likely a RAM or CPU issue. **Do not** add for LLM slowness.
 
-#### desktop
-
-Desktop app issues:
-
-- `opencode web` command
-- The desktop app itself
-
-**Only** add if it's specifically about the Desktop application or `opencode web` view. **Do not** add for terminal, TUI, or general opencode issues.
-
 #### nix
 
 **Only** add if the issue explicitly mentions nix.
@@ -90,8 +81,8 @@ TUI issues potentially caused by our underlying TUI library:
 
 When assigning to people here are the following rules:
 
-Desktop / Web:
-Use for desktop-labeled issues only.
+Web:
+Use for web-labeled issues only.
 
 - adamdotdevin
 - iamdavidhill
@@ -131,7 +122,7 @@ Determinism rules:
 - If title + body does not contain "zen", do not add the "zen" label
 - If "nix" label is added but title + body does not mention nix/nixos, the tool will drop "nix"
 - If title + body mentions nix/nixos, assign to `rekram1-node`
-- If "desktop" label is added, the tool will override assignee and randomly pick one Desktop / Web owner
+- If "web" label is added, the tool will override assignee and randomly pick one Web owner
 
 In all other cases, choose the team/section with the most overlap with the issue and assign a member from that team at random.
 

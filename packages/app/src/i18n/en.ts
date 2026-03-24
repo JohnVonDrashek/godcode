@@ -154,12 +154,6 @@ export const dict = {
   "provider.connect.oauth.auto.visit.suffix":
     " and enter the code below to connect your account and use {{provider}} models in OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
-  "provider.connect.test": "Test Connection",
-  "provider.connect.test.validating": "Validating API key...",
-  "provider.connect.test.success": "Connection successful!",
-  "provider.connect.test.response": "Response from {{model}}:",
-  "provider.connect.test.failed": "Connection failed: {{error}}",
-  "provider.connect.test.saveBlocked": "Test your API key before saving.",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 

@@ -4040,6 +4040,38 @@ export type ProviderAuthResponses = {
 
 export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
 
+export type ProviderTestData = {
+  body?: {
+    /**
+     * API key to test
+     */
+    key: string
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/test"
+}
+
+export type ProviderTestResponses = {
+  /**
+   * Test result
+   */
+  200: {
+    message: string
+    model: string
+  }
+}
+
+export type ProviderTestResponse = ProviderTestResponses[keyof ProviderTestResponses]
+
 export type ProviderOauthAuthorizeData = {
   body?: {
     /**

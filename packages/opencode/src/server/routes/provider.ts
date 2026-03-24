@@ -85,6 +85,48 @@ export const ProviderRoutes = lazy(() =>
       },
     )
     .post(
+      "/:providerID/test",
+      describeRoute({
+        summary: "Test provider connection",
+        description: "Test a provider API key by sending a hello world prompt to verify it works.",
+        operationId: "provider.test",
+        responses: {
+          200: {
+            description: "Test result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    message: z.string(),
+                    model: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: ProviderID.zod.meta({ description: "Provider ID" }),
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          key: z.string().meta({ description: "API key to test" }),
+        }),
+      ),
+      async (c) => {
+        const providerID = c.req.valid("param").providerID
+        const { key } = c.req.valid("json")
+        const result = await Provider.test(providerID, key)
+        return c.json(result)
+      },
+    )
+    .post(
       "/:providerID/oauth/authorize",
       describeRoute({
         summary: "OAuth authorize",

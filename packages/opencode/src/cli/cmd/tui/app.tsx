@@ -217,33 +217,31 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
+  // Cache the last completed selection text so Ctrl+C can access it even if
+  // renderer.getSelection() has been cleared by the time the keyboard handler fires.
+  // The "selection" event is emitted by the renderer when a mouse-drag selection
+  // finishes (finishSelection), which is the only reliable hook — onMouseUp on
+  // the root box does NOT fire when a selection ends because the framework
+  // short-circuits mouse-up during selection drag.
+  let lastSelectionText = ""
+  renderer.on("selection", (sel: { getSelectedText: () => string }) => {
+    lastSelectionText = sel?.getSelectedText() ?? ""
+  })
+
+  // Ctrl+C / Cmd+C with a selection copies to clipboard.
+  // Note: on macOS, Cmd+C is typically intercepted by the terminal emulator
+  // and never reaches the TUI, so Ctrl+C is the reliable binding.
+  // With Kitty keyboard protocol, Cmd arrives as evt.super (not evt.meta),
+  // so we check all three modifier flags.
   useKeyboard((evt) => {
-    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-    if (!renderer.getSelection()) return
-
-    // Windows Terminal-like behavior:
-    // - Ctrl+C copies and dismisses selection
-    // - Esc dismisses selection
-    // - Most other key input dismisses selection and is passed through
-    if (evt.ctrl && evt.name === "c") {
-      if (!Selection.copy(renderer, toast)) {
-        renderer.clearSelection()
-        return
-      }
-
-      evt.preventDefault()
-      evt.stopPropagation()
-      return
-    }
-
-    if (evt.name === "escape") {
-      renderer.clearSelection()
-      evt.preventDefault()
-      evt.stopPropagation()
-      return
-    }
-
-    renderer.clearSelection()
+    if (!(evt.ctrl || evt.meta || evt.super) || evt.name !== "c") return
+    const text = renderer.getSelection()?.getSelectedText() || lastSelectionText
+    if (!text) return
+    Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    evt.preventDefault()
+    evt.stopPropagation()
   })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
@@ -794,14 +792,11 @@ function App() {
       height={dimensions().height}
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
-
         if (!Selection.copy(renderer, toast)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
       <Switch>
         <Match when={route.data.type === "home"}>

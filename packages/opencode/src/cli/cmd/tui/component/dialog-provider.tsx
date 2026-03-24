@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, Match, onMount, Show, Switch } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -263,18 +263,118 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
+        dialog.replace(() => <ApiTestConnection providerID={props.providerID} title={props.title} apiKey={value} />)
+      }}
+    />
+  )
+}
+
+interface ApiTestConnectionProps {
+  providerID: string
+  title: string
+  apiKey: string
+}
+function ApiTestConnection(props: ApiTestConnectionProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+  const [state, setState] = createSignal<"testing" | "success" | "failed">("testing")
+  const [message, setMessage] = createSignal("")
+  const [model, setModel] = createSignal("")
+  const [error, setError] = createSignal("")
+
+  useKeyboard((evt) => {
+    if (evt.name === "return" && state() === "success") {
+      void (async () => {
         await sdk.client.auth.set({
           providerID: props.providerID,
           auth: {
             type: "api",
-            key: value,
+            key: props.apiKey,
           },
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
-      }}
-    />
+      })()
+    }
+    if (evt.name === "r" && state() === "failed") {
+      setState("testing")
+      void runTest()
+    }
+    if (evt.name === "b" && state() === "failed") {
+      dialog.replace(() => <ApiMethod providerID={props.providerID} title={props.title} />)
+    }
+  })
+
+  async function runTest() {
+    try {
+      const result = await sdk.client.provider.test({
+        providerID: props.providerID,
+        key: props.apiKey,
+      })
+      if (result.error) {
+        const data = result.error as any
+        const msg = data?.data?.message ?? data?.message ?? JSON.stringify(result.error)
+        setState("failed")
+        setError(String(msg))
+        return
+      }
+      setState("success")
+      setMessage(result.data!.message)
+      setModel(result.data!.model)
+    } catch (e: any) {
+      setState("failed")
+      setError(e?.message ?? String(e))
+    }
+  }
+
+  onMount(() => {
+    dialog.setSize("medium")
+    void runTest()
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          Test Connection
+        </text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
+      </box>
+      <Switch>
+        <Match when={state() === "testing"}>
+          <text fg={theme.textMuted}>Validating API key...</text>
+        </Match>
+        <Match when={state() === "success"}>
+          <box gap={1}>
+            <text fg={theme.success ?? theme.primary}>Connection successful!</text>
+            <text fg={theme.textMuted}>Response from {model()}:</text>
+            <text fg={theme.text}>"{message()}"</text>
+          </box>
+          <text fg={theme.text}>
+            enter <span style={{ fg: theme.textMuted }}>save and continue</span>
+          </text>
+        </Match>
+        <Match when={state() === "failed"}>
+          <box gap={1}>
+            <text fg={theme.error}>Connection failed</text>
+            <text fg={theme.textMuted}>{error()}</text>
+          </box>
+          <box flexDirection="row" gap={2}>
+            <text fg={theme.text}>
+              r <span style={{ fg: theme.textMuted }}>retry</span>
+            </text>
+            <text fg={theme.text}>
+              b <span style={{ fg: theme.textMuted }}>back</span>
+            </text>
+          </box>
+        </Match>
+      </Switch>
+    </box>
   )
 }
 

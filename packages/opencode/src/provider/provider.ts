@@ -3,7 +3,7 @@ import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import { NoSuchModelError, type Provider as SDK } from "ai"
+import { generateText, NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Hash } from "../util/hash"
@@ -1043,11 +1043,36 @@ export namespace Provider {
     }
 
     // load env
+    // For each provider, check for a provider-specific env var first
+    // (derived from the provider ID, e.g. MOONSHOTAI_API_KEY for "moonshotai"),
+    // then fall back to the shared env var from models.dev. When multiple
+    // providers share the same env var (e.g. moonshotai and moonshotai-cn both
+    // use MOONSHOT_API_KEY), only auto-connect via the shared var if no other
+    // provider has already claimed it with a provider-specific var.
     const env = Env.all()
+    const claimedEnvVars = new Set<string>()
+
+    // First pass: connect providers that have a provider-specific env var set
     for (const [id, provider] of Object.entries(database)) {
       const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
+      const specificVar = id.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY"
+      const specificKey = env[specificVar]
+      if (!specificKey) continue
+      // Mark the shared env vars as claimed so the fallback pass skips this provider's shared vars
+      for (const v of provider.env) claimedEnvVars.add(v)
+      mergeProvider(providerID, {
+        source: "env",
+        key: specificKey,
+      })
+    }
+
+    // Second pass: fall back to shared env vars from models.dev for remaining providers
+    for (const [id, provider] of Object.entries(database)) {
+      const providerID = ProviderID.make(id)
+      if (disabled.has(providerID)) continue
+      if (providers[providerID]) continue // already connected in first pass
+      const apiKey = provider.env.filter((v) => !claimedEnvVars.has(v)).map((item) => env[item]).find(Boolean)
       if (!apiKey) continue
       mergeProvider(providerID, {
         source: "env",
@@ -1440,6 +1465,77 @@ export namespace Provider {
     }
 
     return undefined
+  }
+
+  export async function test(providerID: ProviderID, apiKey: string) {
+    const modelsDev = await ModelsDev.get()
+    const providerData = modelsDev[providerID]
+    if (!providerData) throw new Error(`Unknown provider: ${providerID}`)
+
+    // Find a small/cheap model to test with
+    const smallPriority = [
+      "claude-haiku-4-5",
+      "claude-haiku-4.5",
+      "3-5-haiku",
+      "3.5-haiku",
+      "gemini-3-flash",
+      "gemini-2.5-flash",
+      "gpt-5-nano",
+      "gpt-5-mini",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "mistral-small",
+      "llama",
+      "qwen",
+    ]
+
+    const modelIDs = Object.keys(providerData.models)
+    let testModelID: string | undefined
+    for (const hint of smallPriority) {
+      testModelID = modelIDs.find((m) => m.includes(hint))
+      if (testModelID) break
+    }
+    if (!testModelID) testModelID = modelIDs[0]
+    if (!testModelID) throw new Error(`No models found for provider: ${providerID}`)
+
+    const modelData = providerData.models[testModelID]
+    const npm = modelData.provider?.npm ?? providerData.npm ?? "@ai-sdk/openai-compatible"
+    const baseURL = modelData.provider?.api ?? providerData.api
+
+    const bundledFn = BUNDLED_PROVIDERS[npm]
+    if (!bundledFn) throw new Error(`Provider SDK not bundled: ${npm}`)
+
+    const sdkOptions: Record<string, any> = {
+      name: providerID,
+      apiKey,
+    }
+    if (baseURL) sdkOptions.baseURL = baseURL
+    const sdk = bundledFn(sdkOptions) as SDK
+
+    const apiModelID = modelData.id
+    const customLoader = CUSTOM_LOADERS[providerID]
+    let languageModel
+    if (customLoader) {
+      const loaderResult = await customLoader(fromModelsDevProvider(providerData))
+      if (loaderResult.getModel) {
+        languageModel = await loaderResult.getModel(sdk, apiModelID)
+      }
+    }
+    if (!languageModel) {
+      languageModel = sdk.languageModel(apiModelID)
+    }
+
+    const result = await generateText({
+      model: languageModel,
+      prompt: "Say hello in one short sentence.",
+      maxOutputTokens: 50,
+      abortSignal: AbortSignal.timeout(15000),
+    })
+
+    return {
+      message: result.text,
+      model: testModelID,
+    }
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]

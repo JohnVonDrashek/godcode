@@ -1,7 +1,7 @@
 /// <reference path="../env.d.ts" />
 import { tool } from "@opencode-ai/plugin"
 const TEAM = {
-  desktop: ["adamdotdevin", "iamdavidhill", "Brendonovich", "nexxeln"],
+  web: ["adamdotdevin", "iamdavidhill", "Brendonovich", "nexxeln"],
   zen: ["fwang", "MrMushrooooom"],
   tui: ["thdxr", "kommander", "rekram1-node"],
   core: ["thdxr", "rekram1-node", "jlongster"],
@@ -50,7 +50,7 @@ If unsure, choose the team/section with the most overlap with the issue and assi
       .describe("The username of the assignee")
       .default("rekram1-node"),
     labels: tool.schema
-      .array(tool.schema.enum(["nix", "opentui", "perf", "web", "desktop", "zen", "docs", "windows", "core"]))
+      .array(tool.schema.enum(["nix", "opentui", "perf", "web", "zen", "docs", "windows", "core"]))
       .describe("The labels(s) to add to the issue")
       .default([]),
   },
@@ -60,7 +60,7 @@ If unsure, choose the team/section with the most overlap with the issue and assi
     const repo = "opencode"
 
     const results: string[] = []
-    let labels = [...new Set(args.labels.map((x) => (x === "desktop" ? "web" : x)))]
+    let labels = [...new Set(args.labels)]
     const web = labels.includes("web")
     const text = `${process.env.ISSUE_TITLE ?? ""}\n${process.env.ISSUE_BODY ?? ""}`.toLowerCase()
     const zen = /\bzen\b/.test(text) || text.includes("opencode black")
@@ -71,13 +71,13 @@ If unsure, choose the team/section with the most overlap with the issue and assi
       results.push("Dropped label: nix (issue does not mention nix)")
     }
 
-    const assignee = nix ? "rekram1-node" : web ? pick(TEAM.desktop) : args.assignee
+    const assignee = nix ? "rekram1-node" : web ? pick(TEAM.web) : args.assignee
 
     if (labels.includes("zen") && !zen) {
       throw new Error("Only add the zen label when issue title/body contains 'zen'")
     }
 
-    if (web && !nix && !(TEAM.desktop as readonly string[]).includes(assignee)) {
+    if (web && !nix && !(TEAM.web as readonly string[]).includes(assignee)) {
       throw new Error("Web issues must be assigned to adamdotdevin, iamdavidhill, Brendonovich, or nexxeln")
     }
 
