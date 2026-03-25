@@ -773,6 +773,10 @@ export function Prompt(props: PromptProps) {
       const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
       return `Run a command... "${example}"`
     }
+    const agent = local.agent.current()
+    if (agent.description) {
+      return `${Locale.titlecase(agent.name)}: ${agent.description}`
+    }
     return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
   })
 
