@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg, RGBA } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -1163,16 +1163,16 @@ export function Prompt(props: PromptProps) {
                       {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
                     </text>
                   </Show>
-                  <text fg={theme.secondary}>
+                  <text fg={RGBA.fromHex("#ff9f1a")}>
                     /connect <span style={{ fg: theme.textMuted }}>providers</span>
                   </text>
-                  <text fg={theme.success}>
+                  <text fg={RGBA.fromHex("#1ab2ff")}>
                     /models <span style={{ fg: theme.textMuted }}>switch</span>
                   </text>
-                  <text fg={theme.primary}>
+                  <text fg={RGBA.fromHex("#ff1a1a")}>
                     {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                   </text>
-                  <text fg={theme.warning}>
+                  <text fg={RGBA.fromHex("#bf5fff")}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
                 </Match>
