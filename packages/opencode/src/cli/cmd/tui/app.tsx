@@ -228,15 +228,15 @@ function App() {
     lastSelectionText = sel?.getSelectedText() ?? ""
   })
 
-  // Ctrl+C / Cmd+C with a selection copies to clipboard.
-  // Note: on macOS, Cmd+C is typically intercepted by the terminal emulator
-  // and never reaches the TUI, so Ctrl+C is the reliable binding.
-  // With Kitty keyboard protocol, Cmd arrives as evt.super (not evt.meta),
-  // so we check all three modifier flags.
+  // Cmd+C with a selection copies to clipboard.
+  // Note: on macOS, Cmd+C is typically intercepted by the terminal emulator,
+  // so this only fires with Kitty keyboard protocol where Cmd arrives as evt.super.
+  // Ctrl+C is reserved for exit (SIGINT).
   useKeyboard((evt) => {
-    if (!(evt.ctrl || evt.meta || evt.super) || evt.name !== "c") return
+    if (!(evt.meta || evt.super) || evt.name !== "c") return
     const text = renderer.getSelection()?.getSelectedText() || lastSelectionText
     if (!text) return
+    lastSelectionText = ""
     Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
