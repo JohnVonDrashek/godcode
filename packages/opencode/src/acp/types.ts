@@ -13,6 +13,10 @@ export interface ACPSessionState {
   }
   variant?: string
   modeId?: string
+  shadowModel?: {
+    providerID: ProviderID
+    modelID: ModelID
+  }
 }
 
 export interface ACPConfig {

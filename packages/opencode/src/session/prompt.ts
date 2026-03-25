@@ -2,6 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import z from "zod"
+import { streamObject, type ModelMessage } from "ai"
 import { Filesystem } from "../util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -20,6 +21,7 @@ import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
+import PROMPT_KICKER from "../session/prompt/kicker.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
@@ -112,6 +114,12 @@ export namespace SessionPrompt {
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
+    shadowModel: z
+      .object({
+        providerID: ProviderID.zod,
+        modelID: ModelID.zod,
+      })
+      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -293,6 +301,12 @@ export namespace SessionPrompt {
     // on the user message and will be retrieved from lastUser below
     let structuredOutput: unknown | undefined
 
+    // Shadow mode state
+    let shadowPipelinePromise: Promise<void> | undefined
+    let shadowKicked = false
+    let shadowNotifyMainDone: ((messageID: MessageID) => void) | undefined
+    let lastProcessorMessageID: MessageID | undefined
+
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
@@ -324,6 +338,16 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        // Wait for shadow pipeline before exiting
+        if (shadowPipelinePromise) {
+          if (shadowNotifyMainDone && lastProcessorMessageID) {
+            shadowNotifyMainDone(lastProcessorMessageID)
+            shadowNotifyMainDone = undefined
+          }
+          await shadowPipelinePromise
+          shadowPipelinePromise = undefined
+          if (shadowKicked) continue
+        }
         log.info("exiting loop", { sessionID })
         break
       }
@@ -569,11 +593,14 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const agent = await Agent.get(lastUser.agent)
+      // In shadow mode, the root session uses "shadow-main" for main processing — shadow runs in parallel as a child
+      // Child sessions (parentID set) keep "shadow" so they use the shadow agent config + prompt
+      const agentName = lastUser.agent === "shadow" && !session.parentID ? "shadow-main" : lastUser.agent
+      const agent = await Agent.get(agentName)
       if (!agent) {
         const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
+        const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
         Bus.publish(Session.Event.Error, {
           sessionID,
           error: error.toObject(),
@@ -651,6 +678,66 @@ export namespace SessionPrompt {
         })
       }
 
+      // Shadow mode: launch full shadow pipeline (analysis + kick decision) in background on step 1
+      // Only spawn from the root session (no parentID) to prevent infinite recursion
+      // The shadow will self-inject a kick message and resume the loop if needed
+      if (step === 1 && lastUser.agent === "shadow" && !shadowKicked && !session.parentID) {
+        const shadowAbort = new AbortController()
+        let resolveMainDone: (output: string) => void
+        const mainDonePromise = new Promise<string>((r) => { resolveMainDone = r })
+        shadowNotifyMainDone = (messageID: MessageID) => {
+          MessageV2.parts(messageID).then((parts) => {
+            const text = parts
+              .filter((p) => p.type === "text")
+              .map((p) => (p as MessageV2.TextPart).text)
+              .join("\n")
+              .trim()
+            resolveMainDone!(text)
+          })
+        }
+        // Shadow model priority: user message > shadow agent config > main model
+        const shadowAgent = await Agent.get("shadow")
+        const shadowModel = lastUser.shadowModel ?? shadowAgent?.model ?? { providerID: model.providerID, modelID: model.id }
+        shadowPipelinePromise = runShadowPipeline({
+          sessionID,
+          model: shadowModel,
+          messages: msgs,
+          abort: shadowAbort.signal,
+          shadowAbort,
+          lastUser,
+          getMainAgentOutput: () => mainDonePromise,
+          onKick: async (feedback) => {
+            if (shadowKicked) return
+            shadowKicked = true
+            const kickMsg: MessageV2.User = {
+              id: MessageID.ascending(),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: lastUser.agent,
+              model: lastUser.model,
+            }
+            await Session.updateMessage(kickMsg)
+            await Session.updatePart({
+              id: PartID.ascending(),
+              messageID: kickMsg.id,
+              sessionID,
+              type: "text",
+              text: [
+                "<system-reminder>",
+                "A shadow agent ran in parallel and identified additional considerations you may have missed:",
+                "",
+                feedback,
+                "",
+                "Review the above and address anything you missed. If you already covered everything, briefly acknowledge and finish.",
+                "</system-reminder>",
+              ].join("\n"),
+              synthetic: true,
+            } satisfies MessageV2.TextPart)
+          },
+        })
+      }
+
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
         for (const msg of msgs) {
@@ -673,11 +760,13 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
-      const skills = await SystemPrompt.skills(agent)
+      // Shadow agent doesn't need AGENTS.md instructions or skills — just its own prompt + environment
+      const isShadowAgent = agent.name === "shadow"
+      const skills = isShadowAgent ? null : await SystemPrompt.skills(agent)
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
-        ...(await InstructionPrompt.system()),
+        ...(isShadowAgent ? [] : await InstructionPrompt.system()),
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
@@ -731,7 +820,23 @@ export namespace SessionPrompt {
         }
       }
 
-      if (result === "stop") break
+      lastProcessorMessageID = processor.message.id
+      if (result === "stop") {
+        // If shadow is running, wait for it and handle kick before exiting
+        if (shadowPipelinePromise) {
+          if (shadowNotifyMainDone && lastProcessorMessageID) {
+            shadowNotifyMainDone(lastProcessorMessageID)
+            shadowNotifyMainDone = undefined
+          }
+          await shadowPipelinePromise
+          shadowPipelinePromise = undefined
+          if (shadowKicked) {
+            // Shadow kicked — loop continues to process the kick message
+            continue
+          }
+        }
+        break
+      }
       if (result === "compact") {
         await SessionCompaction.create({
           sessionID,
@@ -1017,6 +1122,7 @@ export namespace SessionPrompt {
       system: input.system,
       format: input.format,
       variant,
+      shadowModel: input.shadowModel,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
@@ -1524,6 +1630,245 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return input.messages
     }
     return input.messages
+  }
+
+  /**
+   * Phase 1: Run the shadow agent in parallel with the main agent.
+   * The shadow independently analyzes the user's request (read-only).
+   * Returns the shadow's analysis text.
+   */
+  async function runShadowAnalysis(input: {
+    sessionID: SessionID
+    model: { providerID: ProviderID; modelID: ModelID }
+    messages: MessageV2.WithParts[]
+    abort: AbortSignal
+    onSessionCreated?: (sessionID: SessionID) => void
+  }): Promise<{ shadowOutput: string; shadowSessionID: SessionID } | undefined> {
+    try {
+      const shadowAgent = await Agent.get("shadow")
+      if (!shadowAgent) return undefined
+
+      const shadowSession = await Session.create({
+        parentID: input.sessionID,
+        title: "Shadow agent",
+        permission: [
+          { permission: "edit", pattern: "*", action: "deny" },
+          { permission: "write", pattern: "*", action: "deny" },
+          { permission: "bash", pattern: "*", action: "deny" },
+          { permission: "apply_patch", pattern: "*", action: "deny" },
+          { permission: "todowrite", pattern: "*", action: "deny" },
+          { permission: "todoread", pattern: "*", action: "deny" },
+          { permission: "question", pattern: "*", action: "deny" },
+          { permission: "plan_exit", pattern: "*", action: "deny" },
+          { permission: "plan_enter", pattern: "*", action: "deny" },
+          { permission: "skill", pattern: "*", action: "deny" },
+        ],
+      })
+
+      input.onSessionCreated?.(shadowSession.id)
+
+      const lastUserMsg = input.messages.findLast((m) => m.info.role === "user")
+      if (!lastUserMsg) return undefined
+
+      const userTextParts = lastUserMsg.parts
+        .filter((p) => p.type === "text" && !p.synthetic)
+        .map((p) => (p as MessageV2.TextPart).text)
+        .join("\n")
+
+      if (!userTextParts.trim()) return undefined
+
+      const promptParts = await SessionPrompt.resolvePromptParts(userTextParts)
+
+      function cancelShadow() {
+        SessionPrompt.cancel(shadowSession.id)
+      }
+      input.abort.addEventListener("abort", cancelShadow)
+
+      let result: MessageV2.WithParts
+      try {
+        result = await SessionPrompt.prompt({
+          messageID: MessageID.ascending(),
+          sessionID: shadowSession.id,
+          model: input.model,
+          agent: "shadow",
+          parts: promptParts,
+        })
+      } finally {
+        input.abort.removeEventListener("abort", cancelShadow)
+      }
+
+      const shadowOutput = result.parts
+        .filter((p) => p.type === "text")
+        .map((p) => (p as MessageV2.TextPart).text)
+        .join("\n")
+        .trim()
+
+      if (!shadowOutput) return undefined
+
+      return { shadowOutput, shadowSessionID: shadowSession.id }
+    } catch (error) {
+      log.error("shadow analysis failed", { error })
+      return undefined
+    }
+  }
+
+  const KickerDecision = z.object({
+    shouldKick: z.boolean().describe("Whether the main agent missed something important enough to warrant a kick"),
+    reason: z.string().min(10).describe("REQUIRED: Explain why you are or are not kicking. Must be a real explanation, never empty."),
+    feedback: z.string().describe("If kicking, the actionable feedback to send to the main agent. If not kicking, summarize what the main agent got right."),
+  })
+
+  /**
+   * Phase 2: After the main agent finishes, the shadow reviews both outputs
+   * and decides via structured JSON whether to "kick" the main agent.
+   */
+  async function runKickerDecision(input: {
+    sessionID: SessionID
+    model: { providerID: ProviderID; modelID: ModelID }
+    userPrompt: string
+    shadowAnalysis: string
+    mainAgentOutput: string
+    abort: AbortSignal
+  }): Promise<{ shouldKick: boolean; reason: string; feedback: string } | undefined> {
+    try {
+      const resolved = await Provider.getModel(input.model.providerID, input.model.modelID)
+      const language = await Provider.getLanguage(resolved)
+
+      const result = streamObject({
+        model: language,
+        schema: KickerDecision,
+        abortSignal: input.abort,
+        onError: () => {},
+        messages: [
+          {
+            role: "system" as const,
+            content: PROMPT_KICKER,
+          },
+          {
+            role: "user" as const,
+            content: `## User's original request:
+${input.userPrompt}
+
+## Shadow's testing analysis:
+${input.shadowAnalysis}
+
+## Main agent's output:
+${input.mainAgentOutput}
+
+Based on comparing the shadow's testing analysis with the main agent's output, should you kick the main agent?`,
+          },
+        ],
+      })
+
+      for await (const partial of result.partialObjectStream) {
+        Bus.publish(Session.Event.KickerStream, {
+          sessionID: input.sessionID,
+          partial: {
+            reason: partial.reason,
+          },
+        })
+      }
+
+      return await result.object
+    } catch (error) {
+      log.error("kicker decision failed", { error })
+      return undefined
+    }
+  }
+
+  /**
+   * Full shadow pipeline: runs analysis in parallel, waits for main agent output,
+   * then makes a kick decision. Entirely non-blocking to the main loop.
+   * If it decides to kick, injects a message and resumes the session loop.
+   */
+  function runShadowPipeline(input: {
+    sessionID: SessionID
+    model: { providerID: ProviderID; modelID: ModelID }
+    messages: MessageV2.WithParts[]
+    abort: AbortSignal
+    shadowAbort: AbortController
+    lastUser: MessageV2.User
+    getMainAgentOutput: () => Promise<string>
+    onKick: (feedback: string) => Promise<void>
+  }): Promise<void> {
+    return (async () => {
+      try {
+        Bus.publish(Session.Event.ShadowPhase, { sessionID: input.sessionID, phase: "shadow_analyzing" })
+
+        // Subscribe to shadow session's text deltas to stream preview as tokens arrive
+        let shadowText = ""
+        let shadowSessionID: SessionID | undefined
+        const unsub = Bus.subscribe(MessageV2.Event.PartDelta, (event) => {
+          if (!shadowSessionID || event.properties.sessionID !== shadowSessionID) return
+          if (event.properties.field !== "text") return
+          shadowText += event.properties.delta
+          Bus.publish(Session.Event.ShadowOutput, {
+            sessionID: input.sessionID,
+            preview: shadowText,
+            fullOutput: shadowText,
+          })
+        })
+
+        // Phase 1: shadow analysis (runs in parallel with main agent)
+        const analysisResult = await runShadowAnalysis({
+          sessionID: input.sessionID,
+          model: input.model,
+          messages: input.messages,
+          abort: input.abort,
+          onSessionCreated: (id) => { shadowSessionID = id },
+        })
+        unsub()
+        if (!analysisResult || input.abort.aborted) return
+
+        // Final publish with complete text
+        Bus.publish(Session.Event.ShadowOutput, {
+          sessionID: input.sessionID,
+          preview: analysisResult.shadowOutput,
+          fullOutput: analysisResult.shadowOutput,
+        })
+        Bus.publish(Session.Event.ShadowPhase, { sessionID: input.sessionID, phase: "shadow_waiting" })
+
+        // Wait for main agent to finish before kicker can compare
+        const mainAgentOutput = await input.getMainAgentOutput()
+
+        const userPrompt = input.messages
+          .findLast((m) => m.info.role === "user")
+          ?.parts.filter((p) => p.type === "text" && !p.synthetic)
+          .map((p) => (p as MessageV2.TextPart).text)
+          .join("\n") ?? ""
+
+        Bus.publish(Session.Event.ShadowPhase, { sessionID: input.sessionID, phase: "kicker_deciding" })
+
+        // Phase 2: kicker decision via structured JSON
+        const kickDecision = await runKickerDecision({
+          sessionID: input.sessionID,
+          model: input.model,
+          userPrompt,
+          shadowAnalysis: analysisResult.shadowOutput,
+          mainAgentOutput,
+          abort: input.abort,
+        })
+
+        if (input.abort.aborted) return
+
+        Bus.publish(Session.Event.KickerDecision, {
+          sessionID: input.sessionID,
+          kicked: kickDecision?.shouldKick ?? false,
+          reason: kickDecision?.reason ?? "Kicker failed to produce a decision",
+          feedback: kickDecision?.shouldKick ? kickDecision.feedback : undefined,
+        })
+
+        if (kickDecision?.shouldKick && kickDecision.feedback) {
+          await input.onKick(kickDecision.feedback)
+        }
+      } catch (error) {
+        if (input.abort.aborted) return
+        log.error("shadow pipeline failed", { error })
+      } finally {
+        Bus.publish(Session.Event.ShadowPhase, { sessionID: input.sessionID, phase: "done" })
+        input.shadowAbort.abort()
+      }
+    })()
   }
 
   export const ShellInput = z.object({

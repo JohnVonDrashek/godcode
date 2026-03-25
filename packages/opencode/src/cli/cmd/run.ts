@@ -443,6 +443,11 @@ export const RunCommand = cmd({
 
       async function loop() {
         const toggles = new Map<string, boolean>()
+        let shadowPreview: string | undefined
+        let shadowPrintedLen = 0
+        let shadowHeaderPrinted = false
+        let kickerPrintedLen = 0
+        let kickerHeaderPrinted = false
 
         for await (const event of events.stream) {
           if (
@@ -531,6 +536,71 @@ export const RunCommand = cmd({
             error = error ? error + EOL + err : err
             if (emit("error", { error: props.error })) continue
             UI.error(err)
+          }
+
+          if ((event as any).type === "session.shadow_phase") {
+            const props = (event as any).properties
+            if (props.sessionID !== sessionID) continue
+            if (props.phase === "shadow_analyzing") UI.println(UI.Style.TEXT_DIM + "◐ shadow analyzing..." + UI.Style.TEXT_NORMAL)
+            if (props.phase === "kicker_deciding") {
+              // End the shadow section if streaming
+              if (shadowHeaderPrinted) {
+                UI.println(UI.Style.TEXT_NORMAL)
+                UI.println(UI.Style.TEXT_DIM + "---" + UI.Style.TEXT_NORMAL)
+                UI.println("")
+              }
+              UI.println(UI.Style.TEXT_DIM + "◐ kicker deciding..." + UI.Style.TEXT_NORMAL)
+            }
+          }
+
+          if ((event as any).type === "session.shadow_output") {
+            const props = (event as any).properties
+            if (props.sessionID !== sessionID) continue
+            const text = props.preview as string
+            if (!shadowHeaderPrinted) {
+              shadowHeaderPrinted = true
+              UI.println("")
+              UI.println(UI.Style.TEXT_DIM + "--- Shadow ---" + UI.Style.TEXT_NORMAL)
+            }
+            // Print only the new text since last update
+            const delta = text.slice(shadowPrintedLen)
+            if (delta) {
+              UI.print(UI.Style.TEXT_DIM + delta)
+              shadowPrintedLen = text.length
+            }
+            shadowPreview = text
+          }
+
+          if ((event as any).type === "session.kicker_stream") {
+            const props = (event as any).properties
+            if (props.sessionID !== sessionID) continue
+            const reason = props.partial?.reason as string | undefined
+            if (reason) {
+              const delta = reason.slice(kickerPrintedLen)
+              if (delta) {
+                if (!kickerHeaderPrinted) {
+                  kickerHeaderPrinted = true
+                  UI.println(UI.Style.TEXT_DIM + "--- Kicker ---" + UI.Style.TEXT_NORMAL)
+                }
+                UI.print(UI.Style.TEXT_DIM + delta)
+                kickerPrintedLen = reason.length
+              }
+            }
+          }
+
+          if ((event as any).type === "session.kicker_decision") {
+            const props = (event as any).properties
+            if (props.sessionID !== sessionID) continue
+            const verb = props.kicked ? "Kick" : "No kick"
+            if (!kickerHeaderPrinted) {
+              UI.println(UI.Style.TEXT_DIM + `--- Kicker: ${verb} ---` + UI.Style.TEXT_NORMAL)
+              UI.println(UI.Style.TEXT_DIM + props.reason + UI.Style.TEXT_NORMAL)
+            } else {
+              UI.println(UI.Style.TEXT_NORMAL)
+              UI.println(UI.Style.TEXT_DIM + `Decision: ${verb}` + UI.Style.TEXT_NORMAL)
+            }
+            UI.println(UI.Style.TEXT_DIM + "---" + UI.Style.TEXT_NORMAL)
+            UI.println("")
           }
 
           if (

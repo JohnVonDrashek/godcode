@@ -113,4 +113,16 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  setShadowModel(sessionId: string, model?: ACPSessionState["shadowModel"]) {
+    const session = this.get(sessionId)
+    session.shadowModel = model
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
+  getShadowModel(sessionId: string) {
+    const session = this.get(sessionId)
+    return session.shadowModel
+  }
 }

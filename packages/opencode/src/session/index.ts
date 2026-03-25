@@ -214,6 +214,39 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
+    ShadowPhase: BusEvent.define(
+      "session.shadow_phase",
+      z.object({
+        sessionID: SessionID.zod,
+        phase: z.enum(["shadow_analyzing", "shadow_waiting", "kicker_deciding", "done"]),
+      }),
+    ),
+    ShadowOutput: BusEvent.define(
+      "session.shadow_output",
+      z.object({
+        sessionID: SessionID.zod,
+        preview: z.string(),
+        fullOutput: z.string(),
+      }),
+    ),
+    KickerStream: BusEvent.define(
+      "session.kicker_stream",
+      z.object({
+        sessionID: SessionID.zod,
+        partial: z.object({
+          reason: z.string().optional(),
+        }),
+      }),
+    ),
+    KickerDecision: BusEvent.define(
+      "session.kicker_decision",
+      z.object({
+        sessionID: SessionID.zod,
+        kicked: z.boolean(),
+        reason: z.string(),
+        feedback: z.string().optional(),
+      }),
+    ),
   }
 
   export const create = fn(

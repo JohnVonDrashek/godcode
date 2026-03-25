@@ -52,6 +52,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_status: {
         [sessionID: string]: SessionStatus
       }
+      shadow_phase: {
+        [sessionID: string]: "shadow_analyzing" | "shadow_waiting" | "kicker_deciding" | "done" | undefined
+      }
+      shadow_preview: {
+        [sessionID: string]: string | undefined
+      }
+      kicker_stream: {
+        [sessionID: string]: { reason?: string } | undefined
+      }
+      kicker_decision: {
+        [sessionID: string]: { kicked: boolean; reason: string } | undefined
+      }
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
       }
@@ -92,6 +104,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_default: {},
       session: [],
       session_status: {},
+      shadow_phase: {},
+      shadow_preview: {},
+      kicker_stream: {},
+      kicker_decision: {},
       session_diff: {},
       todo: {},
       message: {},
@@ -349,6 +365,30 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("vcs", { branch: event.properties.branch })
           break
         }
+      }
+      // Handle shadow events (outside typed switch — types not yet generated)
+      if ((event as any).type === "session.shadow_phase") {
+        const props = (event as any).properties
+        const phase = props.phase === "done" ? undefined : props.phase
+        setStore("shadow_phase", props.sessionID, phase)
+        if (phase === undefined) {
+          // Clear shadow state when done
+          setStore("shadow_preview", props.sessionID, undefined)
+          setStore("kicker_decision", props.sessionID, undefined)
+        }
+      }
+      if ((event as any).type === "session.shadow_output") {
+        const props = (event as any).properties
+        setStore("shadow_preview", props.sessionID, props.preview)
+      }
+      if ((event as any).type === "session.kicker_stream") {
+        const props = (event as any).properties
+        setStore("kicker_stream", props.sessionID, props.partial)
+      }
+      if ((event as any).type === "session.kicker_decision") {
+        const props = (event as any).properties
+        setStore("kicker_stream", props.sessionID, undefined)
+        setStore("kicker_decision", props.sessionID, { kicked: props.kicked, reason: props.reason })
       }
     })
 

@@ -15,7 +15,7 @@ export function useConnected() {
   )
 }
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { providerID?: string; onSelect?: (model: { providerID: string; modelID: string }) => void }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
@@ -24,6 +24,15 @@ export function DialogModel(props: { providerID?: string }) {
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
+
+  function selectModel(model: { providerID: string; modelID: string }) {
+    dialog.clear()
+    if (props.onSelect) {
+      props.onSelect(model)
+    } else {
+      local.model.set(model, { recent: true })
+    }
+  }
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -50,8 +59,7 @@ export function DialogModel(props: { providerID?: string }) {
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
+              selectModel({ providerID: provider.id, modelID: model.id })
             },
           },
         ]
@@ -88,8 +96,7 @@ export function DialogModel(props: { providerID?: string }) {
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect() {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model }, { recent: true })
+              selectModel({ providerID: provider.id, modelID: model })
             },
           })),
           filter((x) => {

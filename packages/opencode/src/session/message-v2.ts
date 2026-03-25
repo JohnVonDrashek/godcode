@@ -369,6 +369,10 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    shadowModel: z.object({
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
+    }).optional(),
   }).meta({
     ref: "UserMessage",
   })

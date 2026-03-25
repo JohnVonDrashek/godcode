@@ -73,6 +73,7 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const shadowPhase = createMemo(() => sync.data.shadow_phase?.[props.sessionID ?? ""])
   const history = usePromptHistory()
   const stash = usePromptStash()
   const command = useCommandDialog()
@@ -630,6 +631,7 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      const shadowModelSelection = local.agent.current().name === "shadow" ? local.model.shadow.current() : undefined
       sdk.client.session
         .prompt({
           sessionID,
@@ -638,6 +640,8 @@ export function Prompt(props: PromptProps) {
           agent: local.agent.current().name,
           model: selectedModel,
           variant,
+          // shadowModel is not yet in generated SDK types
+          ...(shadowModelSelection ? { shadowModel: shadowModelSelection } as any : {}),
           parts: [
             {
               id: PartID.ascending(),
@@ -1026,6 +1030,10 @@ export function Prompt(props: PromptProps) {
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
+                  <Show when={local.agent.current().name === "shadow" && local.model.shadow.parsed()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>shadow: {local.model.shadow.parsed()!.model}</text>
+                  </Show>
                 </box>
               </Show>
             </box>
@@ -1130,6 +1138,14 @@ export function Prompt(props: PromptProps) {
                   })()}
                 </box>
               </box>
+              <Show when={shadowPhase()}>
+                <box flexDirection="row" gap={1} flexShrink={0}>
+                  <spinner color={theme.textMuted} frames={["◐", "◓", "◑", "◒"]} interval={120} />
+                  <text fg={theme.textMuted}>
+                    {shadowPhase() === "shadow_analyzing" ? "shadow analyzing" : shadowPhase() === "shadow_waiting" ? "waiting for main agent" : "kicker deciding"}
+                  </text>
+                </box>
+              </Show>
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                 esc{" "}
                 <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>

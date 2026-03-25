@@ -278,7 +278,7 @@ function App() {
 
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`JC | ${title}`)
     }
   })
 
@@ -423,6 +423,23 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
+      },
+    },
+    {
+      title: "Switch shadow model",
+      value: "model.shadow",
+      category: "Agent",
+      slash: {
+        name: "shadow-model",
+      },
+      onSelect: () => {
+        dialog.replace(() => (
+          <DialogModel
+            onSelect={(model) => {
+              local.model.shadow.set(model)
+            }}
+          />
+        ))
       },
     },
     {
@@ -738,6 +755,8 @@ function App() {
       duration: 5000,
     })
   })
+
+  // Shadow output and kicker decisions are rendered inline in the session view
 
   sdk.event.on("installation.update-available", async (evt) => {
     const version = evt.properties.version

@@ -1164,6 +1164,52 @@ export function Session() {
                   </Switch>
                 )}
               </For>
+              <Show when={sync.data.shadow_phase[route.sessionID] || sync.data.shadow_preview[route.sessionID] || sync.data.kicker_decision[route.sessionID]}>
+                <box
+                  marginTop={1}
+                  paddingLeft={2}
+                  paddingRight={2}
+                  flexShrink={0}
+                  border={["left"]}
+                  customBorderChars={SplitBorder.customBorderChars}
+                  borderColor={theme.textMuted}
+                >
+                  <Show when={sync.data.shadow_preview[route.sessionID]}>
+                    <box paddingTop={1} paddingBottom={1}>
+                      <text fg={theme.textMuted}><span style={{ bold: true }}>Shadow</span></text>
+                      <text fg={theme.textMuted}>{sync.data.shadow_preview[route.sessionID]}</text>
+                    </box>
+                  </Show>
+                  <Show when={sync.data.kicker_decision[route.sessionID]}>
+                    {(() => {
+                      const decision = () => sync.data.kicker_decision[route.sessionID]!
+                      return (
+                        <box paddingBottom={1}>
+                          <text fg={decision().kicked ? theme.warning : theme.textMuted}>
+                            <span style={{ bold: true }}>Kicker: {decision().kicked ? "Kick" : "No kick"}</span>
+                          </text>
+                          <text fg={theme.textMuted}>{decision().reason}</text>
+                        </box>
+                      )
+                    })()}
+                  </Show>
+                  <Show when={sync.data.kicker_stream[route.sessionID] && !sync.data.kicker_decision[route.sessionID]}>
+                    <box paddingBottom={1}>
+                      <Spinner color={theme.textMuted}>kicker deciding...</Spinner>
+                      <Show when={sync.data.kicker_stream[route.sessionID]?.reason}>
+                        <text fg={theme.textMuted}>{sync.data.kicker_stream[route.sessionID]!.reason}</text>
+                      </Show>
+                    </box>
+                  </Show>
+                  <Show when={sync.data.shadow_phase[route.sessionID] && !sync.data.kicker_decision[route.sessionID] && !sync.data.kicker_stream[route.sessionID]}>
+                    <box paddingBottom={1}>
+                      <Spinner color={theme.textMuted}>
+                        {sync.data.shadow_phase[route.sessionID] === "shadow_analyzing" ? "shadow analyzing..." : sync.data.shadow_phase[route.sessionID] === "shadow_waiting" ? "waiting for main agent..." : "kicker deciding..."}
+                      </Spinner>
+                    </box>
+                  </Show>
+                </box>
+              </Show>
             </scrollbox>
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>

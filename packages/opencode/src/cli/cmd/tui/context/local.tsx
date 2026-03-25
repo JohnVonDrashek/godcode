@@ -103,6 +103,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             modelID: string
           }
         >
+        shadowModel?: {
+          providerID: string
+          modelID: string
+        }
         recent: {
           providerID: string
           modelID: string
@@ -135,6 +139,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          shadowModel: modelStore.shadowModel,
         })
       }
 
@@ -143,6 +148,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          if (x.shadowModel && typeof x.shadowModel === "object") setModelStore("shadowModel", x.shadowModel)
         })
         .catch(() => {})
         .finally(() => {
@@ -356,6 +362,37 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             this.set(variants[index + 1])
+          },
+        },
+        shadow: {
+          current() {
+            return modelStore.shadowModel
+          },
+          parsed: createMemo(() => {
+            const value = modelStore.shadowModel
+            if (!value) return undefined
+            const provider = sync.data.provider.find((x) => x.id === value.providerID)
+            const info = provider?.models[value.modelID]
+            return {
+              provider: provider?.name ?? value.providerID,
+              model: info?.name ?? value.modelID,
+            }
+          }),
+          set(model: { providerID: string; modelID: string }) {
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            setModelStore("shadowModel", model)
+            save()
+          },
+          clear() {
+            setModelStore("shadowModel", undefined)
+            save()
           },
         },
       }
