@@ -1,6 +1,6 @@
-import { createMemo, createSignal, Match, onMount, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, onMount, Show, Switch, type Accessor } from "solid-js"
 import { useSync } from "@tui/context/sync"
-import { map, pipe, sortBy } from "remeda"
+import { entries, map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
@@ -23,24 +23,73 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   google: 5,
 }
 
-export function createDialogProviderOptions() {
+/**
+ * Deduplicate model names by collapsing version variants into families.
+ * e.g. ["Claude Opus 4.5", "Claude Opus 4.6", "Claude Sonnet 4.5"] → ["Claude Opus", "Claude Sonnet"]
+ * Non-versioned names are kept as-is and deduplicated.
+ */
+function deduplicateModelFamilies(names: string[]): string[] {
+  // Strip trailing version numbers (e.g. "4.5", "4.6", "3.5", "v2") to get the family name
+  const familyOf = (name: string) =>
+    name
+      .replace(/\s+v?\d+(\.\d+)*(-\w+)*\s*$/, "")
+      .replace(/\s+\(\d{4}-\d{2}-\d{2}\)\s*$/, "")
+      .trim()
+
+  const families = new Set<string>()
+  for (const name of names) {
+    families.add(familyOf(name))
+  }
+  return [...families].sort()
+}
+
+export function createDialogProviderOptions(filter?: Accessor<string>) {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
   const options = createMemo(() => {
+    const needle = (filter?.() ?? "").toLowerCase().trim()
     return pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
-      map((provider) => ({
-        title: provider.name,
-        value: provider.id,
-        description: {
+      map((provider) => {
+        const allFamilies = deduplicateModelFamilies(
+          pipe(
+            provider.models ?? {},
+            entries(),
+            map(([_, model]) => model.name ?? model.id),
+          ),
+        )
+        let subtitles: string[] | undefined
+        if (needle) {
+          // When searching, only show families that match the query, capped at 2
+          const matched = allFamilies.filter((f) => f.toLowerCase().includes(needle))
+          if (matched.length > 2) {
+            subtitles = [...matched.slice(0, 2), `... and ${matched.length - 2} more`]
+          } else if (matched.length > 0) {
+            subtitles = matched
+          }
+        } else {
+          // When not searching, show first 2 + "..." if there are more
+          if (allFamilies.length > 2) {
+            subtitles = [...allFamilies.slice(0, 2), `... and ${allFamilies.length - 2} more`]
+          } else if (allFamilies.length > 0) {
+            subtitles = allFamilies
+          }
+        }
+        const description = {
           opencode: "(Recommended)",
           anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
           "opencode-go": "Low cost subscription for everyone",
-        }[provider.id],
+        }[provider.id]
+        return {
+        title: provider.name,
+        value: provider.id,
+        description,
+        subtitles,
+        searchText: allFamilies.join(" "),
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [
@@ -108,15 +157,16 @@ export function createDialogProviderOptions() {
             return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
           }
         },
-      })),
+      }}),
     )
   })
   return options
 }
 
 export function DialogProvider() {
-  const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  const [filter, setFilter] = createSignal("")
+  const options = createDialogProviderOptions(filter)
+  return <DialogSelect title="Connect a provider" options={options()} onFilter={setFilter} />
 }
 
 interface AutoMethodProps {

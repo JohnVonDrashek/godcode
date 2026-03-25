@@ -34,6 +34,9 @@ export interface DialogSelectOption<T = any> {
   title: string
   value: T
   description?: string
+  subtitles?: string[]
+  /** Hidden text included in fuzzy search but not rendered */
+  searchText?: string
   footer?: JSX.Element | string
   category?: string
   disabled?: boolean
@@ -81,14 +84,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     )
     if (!needle) return options
 
-    // prioritize title matches (weight: 2) over category matches (weight: 1).
-    // users typically search by the item name, and not its category.
+    // prioritize title matches (weight: 2) over category/description/searchText matches (weight: 1).
+    // users typically search by the item name, and not its category, description, or searchText.
     const result = fuzzysort
       .go(needle, options, {
-        keys: ["title", "category"],
-        scoreFn: (r) => r[0].score * 2 + r[1].score,
+        keys: ["title", "category", "description", "searchText"],
+        scoreFn: (r) => Math.max(r[0].score * 2, r[1].score, r[2].score, r[3].score),
       })
       .map((x) => x.obj)
+
+    // Preserve original category ordering from props.options
+    const categoryOrder = new Map<string, number>()
+    for (const opt of props.options) {
+      const cat = opt.category ?? ""
+      if (!categoryOrder.has(cat)) categoryOrder.set(cat, categoryOrder.size)
+    }
+    result.sort((a, b) => (categoryOrder.get(a.category ?? "") ?? 99) - (categoryOrder.get(b.category ?? "") ?? 99))
 
     return result
   })
@@ -292,41 +303,62 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   {(option) => {
                     const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
                     const current = createMemo(() => isDeepEqual(option.value, props.current))
+                    const mouseHandlers = {
+                      onMouseMove: () => setStore("input", "mouse"),
+                      onMouseUp: () => {
+                        option.onSelect?.(dialog)
+                        props.onSelect?.(option)
+                      },
+                      onMouseOver: () => {
+                        if (store.input !== "mouse") return
+                        const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                        if (index === -1) return
+                        moveTo(index)
+                      },
+                      onMouseDown: () => {
+                        const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                        if (index === -1) return
+                        moveTo(index)
+                      },
+                    }
+                    const bg = () => active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)
                     return (
                       <box
                         id={JSON.stringify(option.value)}
-                        flexDirection="row"
-                        onMouseMove={() => {
-                          setStore("input", "mouse")
-                        }}
-                        onMouseUp={() => {
-                          option.onSelect?.(dialog)
-                          props.onSelect?.(option)
-                        }}
-                        onMouseOver={() => {
-                          if (store.input !== "mouse") return
-                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                          if (index === -1) return
-                          moveTo(index)
-                        }}
-                        onMouseDown={() => {
-                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                          if (index === -1) return
-                          moveTo(index)
-                        }}
-                        backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                        paddingLeft={current() || option.gutter ? 1 : 3}
-                        paddingRight={3}
-                        gap={1}
+                        flexDirection="column"
+                        backgroundColor={bg()}
                       >
-                        <Option
-                          title={option.title}
-                          footer={flatten() ? (option.category ?? option.footer) : option.footer}
-                          description={option.description !== category ? option.description : undefined}
-                          active={active()}
-                          current={current()}
-                          gutter={option.gutter}
-                        />
+                        <box
+                          flexDirection="row"
+                          {...mouseHandlers}
+                          paddingLeft={current() || option.gutter ? 1 : 3}
+                          paddingRight={3}
+                          gap={1}
+                        >
+                          <Option
+                            title={option.title}
+                            footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                            description={option.description !== category ? option.description : undefined}
+                            active={active()}
+                            current={current()}
+                            gutter={option.gutter}
+                          />
+                        </box>
+                        <Show when={option.subtitles?.length}>
+                          <box flexDirection="column" paddingLeft={6}>
+                            <For each={option.subtitles}>
+                              {(line) => (
+                                <text
+                                  fg={active() ? selectedForeground(theme) : theme.textMuted}
+                                  overflow="hidden"
+                                  wrapMode="none"
+                                >
+                                  {line}
+                                </text>
+                              )}
+                            </For>
+                          </box>
+                        </Show>
                       </box>
                     )
                   }}

@@ -1163,10 +1163,16 @@ export function Prompt(props: PromptProps) {
                       {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
                     </text>
                   </Show>
-                  <text fg={theme.text}>
+                  <text fg={theme.secondary}>
+                    /connect <span style={{ fg: theme.textMuted }}>providers</span>
+                  </text>
+                  <text fg={theme.success}>
+                    /models <span style={{ fg: theme.textMuted }}>switch</span>
+                  </text>
+                  <text fg={theme.primary}>
                     {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                   </text>
-                  <text fg={theme.text}>
+                  <text fg={theme.warning}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
                 </Match>

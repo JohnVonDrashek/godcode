@@ -84,12 +84,23 @@ function init() {
       return visibleOptions().flatMap((option) => {
         const slash = option.slash
         if (!slash) return []
-        return {
-          display: "/" + slash.name,
-          description: option.description ?? option.title,
-          aliases: slash.aliases?.map((alias) => "/" + alias),
-          onSelect: () => result.trigger(option.value),
+        const items = [
+          {
+            display: "/" + slash.name,
+            description: option.description ?? option.title,
+            aliases: slash.aliases?.map((alias) => "/" + alias),
+            onSelect: () => result.trigger(option.value),
+          },
+        ]
+        for (const alias of slash.aliases ?? []) {
+          items.push({
+            display: "/" + alias,
+            description: option.description ?? option.title,
+            aliases: ["/" + slash.name],
+            onSelect: () => result.trigger(option.value),
+          })
         }
+        return items
       })
     },
     keybinds(enabled: boolean) {
