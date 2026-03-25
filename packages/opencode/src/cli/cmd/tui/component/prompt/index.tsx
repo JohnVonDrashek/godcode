@@ -774,6 +774,9 @@ export function Prompt(props: PromptProps) {
       return `Run a command... "${example}"`
     }
     const agent = local.agent.current()
+    if (agent.name === "shadow") {
+      return `Shadow: Runs a second model in parallel for comparison. Use /shadow-model to change it.`
+    }
     if (agent.description) {
       return `${Locale.titlecase(agent.name)}: ${agent.description}`
     }
