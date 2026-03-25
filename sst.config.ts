@@ -17,6 +17,5 @@ export default $config({
   },
   async run() {
     await import("./infra/app.js")
-    await import("./infra/console.js")
   },
 })
