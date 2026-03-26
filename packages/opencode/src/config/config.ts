@@ -723,6 +723,7 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      switch: z.boolean().optional().describe("Allow switching into this primary agent via agent switch tools"),
       hidden: z
         .boolean()
         .optional()
@@ -755,6 +756,7 @@ export namespace Config {
         "temperature",
         "top_p",
         "mode",
+        "switch",
         "hidden",
         "color",
         "steps",

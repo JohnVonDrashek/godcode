@@ -3,18 +3,10 @@ import path from "path"
 import { Tool } from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"
-import { MessageV2 } from "../session/message-v2"
-import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
-import { type SessionID, MessageID, PartID } from "../session/schema"
+import { jump } from "./switch"
+import ENTER_DESCRIPTION from "./plan-enter.txt"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
-
-async function getLastModel(sessionID: SessionID) {
-  for await (const item of MessageV2.stream(sessionID)) {
-    if (item.info.role === "user" && item.info.model) return item.info.model
-  }
-  return Provider.defaultModel()
-}
 
 export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
@@ -41,37 +33,18 @@ export const PlanExitTool = Tool.define("plan_exit", {
     const answer = answers[0]?.[0]
     if (answer === "No") throw new Question.RejectedError()
 
-    const model = await getLastModel(ctx.sessionID)
-
-    const userMsg: MessageV2.User = {
-      id: MessageID.ascending(),
-      sessionID: ctx.sessionID,
-      role: "user",
-      time: {
-        created: Date.now(),
-      },
-      agent: "build",
-      model,
-    }
-    await Session.updateMessage(userMsg)
-    await Session.updatePart({
-      id: PartID.ascending(),
-      messageID: userMsg.id,
-      sessionID: ctx.sessionID,
-      type: "text",
-      text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
-      synthetic: true,
-    } satisfies MessageV2.TextPart)
+    await jump(ctx, "build", `The plan at ${plan} has been approved, you can now edit files. Execute the plan`)
 
     return {
       title: "Switching to build agent",
       output: "User approved switching to build agent. Wait for further instructions.",
-      metadata: {},
+      metadata: {
+        agent: "build",
+      },
     }
   },
 })
 
-/*
 export const PlanEnterTool = Tool.define("plan_enter", {
   description: ENTER_DESCRIPTION,
   parameters: z.object({}),
@@ -99,33 +72,14 @@ export const PlanEnterTool = Tool.define("plan_enter", {
 
     if (answer === "No") throw new Question.RejectedError()
 
-    const model = await getLastModel(ctx.sessionID)
-
-    const userMsg: MessageV2.User = {
-      id: MessageID.ascending(),
-      sessionID: ctx.sessionID,
-      role: "user",
-      time: {
-        created: Date.now(),
-      },
-      agent: "plan",
-      model,
-    }
-    await Session.updateMessage(userMsg)
-    await Session.updatePart({
-      id: PartID.ascending(),
-      messageID: userMsg.id,
-      sessionID: ctx.sessionID,
-      type: "text",
-      text: "User has requested to enter plan mode. Switch to plan mode and begin planning.",
-      synthetic: true,
-    } satisfies MessageV2.TextPart)
+    await jump(ctx, "plan", "User has requested to enter plan mode. Switch to plan mode and begin planning.")
 
     return {
       title: "Switching to plan agent",
       output: `User confirmed to switch to plan mode. A new message has been created to switch you to plan mode. The plan file will be at ${plan}. Begin planning.`,
-      metadata: {},
+      metadata: {
+        agent: "plan",
+      },
     }
   },
 })
-*/

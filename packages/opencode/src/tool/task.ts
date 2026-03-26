@@ -4,7 +4,6 @@ import z from "zod"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
-import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
@@ -24,6 +23,127 @@ const parameters = z.object({
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
+
+export type TaskParams = z.infer<typeof parameters>
+
+export async function runTask(params: TaskParams, ctx: Tool.Context) {
+  const config = await Config.get()
+
+  if (!ctx.extra?.bypassAgentCheck) {
+    await ctx.ask({
+      permission: "task",
+      patterns: [params.subagent_type],
+      always: ["*"],
+      metadata: {
+        description: params.description,
+        subagent_type: params.subagent_type,
+      },
+    })
+  }
+
+  const agent = await Agent.get(params.subagent_type)
+  if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+  const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+
+  const session = await iife(async () => {
+    if (params.task_id) {
+      const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
+      if (found) return found
+    }
+
+    return await Session.create({
+      parentID: ctx.sessionID,
+      title: params.description + ` (@${agent.name} subagent)`,
+      permission: [
+        {
+          permission: "todowrite",
+          pattern: "*",
+          action: "deny",
+        },
+        {
+          permission: "todoread",
+          pattern: "*",
+          action: "deny",
+        },
+        ...(hasTaskPermission
+          ? []
+          : [
+              {
+                permission: "task" as const,
+                pattern: "*" as const,
+                action: "deny" as const,
+              },
+            ]),
+        ...(config.experimental?.primary_tools?.map((t) => ({
+          pattern: "*",
+          action: "allow" as const,
+          permission: t,
+        })) ?? []),
+      ],
+    })
+  })
+  const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+  if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+  const model = agent.model ?? {
+    modelID: msg.info.modelID,
+    providerID: msg.info.providerID,
+  }
+
+  ctx.metadata({
+    title: params.description,
+    metadata: {
+      sessionId: session.id,
+      model,
+    },
+  })
+
+  const messageID = MessageID.ascending()
+
+  function cancel() {
+    SessionPrompt.cancel(session.id)
+  }
+  ctx.abort.addEventListener("abort", cancel)
+  using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+  const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+
+  const result = await SessionPrompt.prompt({
+    messageID,
+    sessionID: session.id,
+    model: {
+      modelID: model.modelID,
+      providerID: model.providerID,
+    },
+    agent: agent.name,
+    tools: {
+      todowrite: false,
+      todoread: false,
+      ...(hasTaskPermission ? {} : { task: false }),
+      ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+    },
+    parts: promptParts,
+  })
+
+  const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+
+  const output = [
+    `task_id: ${session.id} (for resuming to continue this task if needed)`,
+    "",
+    "<task_result>",
+    text,
+    "</task_result>",
+  ].join("\n")
+
+  return {
+    title: params.description,
+    metadata: {
+      sessionId: session.id,
+      model,
+    },
+    output,
+  }
+}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -45,123 +165,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
-      const config = await Config.get()
-
-      // Skip permission check when user explicitly invoked via @ or command subtask
-      if (!ctx.extra?.bypassAgentCheck) {
-        await ctx.ask({
-          permission: "task",
-          patterns: [params.subagent_type],
-          always: ["*"],
-          metadata: {
-            description: params.description,
-            subagent_type: params.subagent_type,
-          },
-        })
-      }
-
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
-
-      const session = await iife(async () => {
-        if (params.task_id) {
-          const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
-          if (found) return found
-        }
-
-        return await Session.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
-          permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(config.experimental?.primary_tools?.map((t) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: t,
-            })) ?? []),
-          ],
-        })
-      })
-      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
-      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
-
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
-
-      ctx.metadata({
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-      })
-
-      const messageID = MessageID.ascending()
-
-      function cancel() {
-        SessionPrompt.cancel(session.id)
-      }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
-
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
-      })
-
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
-
-      return {
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-        output,
-      }
+      return runTask(params, ctx)
     },
   }
 })

@@ -43,6 +43,7 @@ import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
 import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
+import type { IndependentResearchTool } from "@/tool/independent-research"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
@@ -222,11 +223,9 @@ export function Session() {
     if (part.state.status !== "completed") return
     if (part.id === lastSwitch) return
 
-    if (part.tool === "plan_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
-    } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
+    const next = part.state.metadata?.agent
+    if (["plan_exit", "plan_enter", "agent_switch"].includes(part.tool) && typeof next === "string") {
+      local.agent.set(next)
       lastSwitch = part.id
     }
   })
@@ -1164,7 +1163,13 @@ export function Session() {
                   </Switch>
                 )}
               </For>
-              <Show when={sync.data.shadow_phase[route.sessionID] || sync.data.shadow_preview[route.sessionID] || sync.data.kicker_decision[route.sessionID]}>
+              <Show
+                when={
+                  sync.data.shadow_phase[route.sessionID] ||
+                  sync.data.shadow_preview[route.sessionID] ||
+                  sync.data.kicker_decision[route.sessionID]
+                }
+              >
                 <box
                   marginTop={1}
                   paddingLeft={2}
@@ -1176,7 +1181,9 @@ export function Session() {
                 >
                   <Show when={sync.data.shadow_preview[route.sessionID]}>
                     <box paddingTop={1} paddingBottom={1}>
-                      <text fg={theme.textMuted}><span style={{ bold: true }}>Shadow</span></text>
+                      <text fg={theme.textMuted}>
+                        <span style={{ bold: true }}>Shadow</span>
+                      </text>
                       <text fg={theme.textMuted}>{sync.data.shadow_preview[route.sessionID]}</text>
                     </box>
                   </Show>
@@ -1201,10 +1208,20 @@ export function Session() {
                       </Show>
                     </box>
                   </Show>
-                  <Show when={sync.data.shadow_phase[route.sessionID] && !sync.data.kicker_decision[route.sessionID] && !sync.data.kicker_stream[route.sessionID]}>
+                  <Show
+                    when={
+                      sync.data.shadow_phase[route.sessionID] &&
+                      !sync.data.kicker_decision[route.sessionID] &&
+                      !sync.data.kicker_stream[route.sessionID]
+                    }
+                  >
                     <box paddingBottom={1}>
                       <Spinner color={theme.textMuted}>
-                        {sync.data.shadow_phase[route.sessionID] === "shadow_analyzing" ? "shadow analyzing..." : sync.data.shadow_phase[route.sessionID] === "shadow_waiting" ? "waiting for main agent..." : "kicker deciding..."}
+                        {sync.data.shadow_phase[route.sessionID] === "shadow_analyzing"
+                          ? "shadow analyzing..."
+                          : sync.data.shadow_phase[route.sessionID] === "shadow_waiting"
+                            ? "waiting for main agent..."
+                            : "kicker deciding..."}
                       </Spinner>
                     </box>
                   </Show>
@@ -1407,7 +1424,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+      <Show when={props.parts.some((x) => x.type === "tool" && ["task", "independent-research"].includes(x.tool))}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
             {keybind.print("session_child_first")}
@@ -1603,6 +1620,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         </Match>
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "independent-research"}>
+          <Research {...toolprops} />
         </Match>
         <Match when={props.part.tool === "apply_patch"}>
           <ApplyPatch {...toolprops} />
@@ -2073,6 +2093,69 @@ function Task(props: ToolProps<typeof TaskTool>) {
       spinner={isRunning()}
       complete={props.input.description}
       pending="Delegating..."
+      part={props.part}
+      onClick={() => {
+        if (props.metadata.sessionId) {
+          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        }
+      }}
+    >
+      {content()}
+    </InlineTool>
+  )
+}
+
+function Research(props: ToolProps<typeof IndependentResearchTool>) {
+  const { navigate } = useRoute()
+  const sync = useSync()
+
+  onMount(() => {
+    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length) {
+      sync.session.sync(props.metadata.sessionId)
+    }
+  })
+
+  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+  const tools = createMemo(() => {
+    return messages().flatMap((msg) =>
+      (sync.data.part[msg.id] ?? [])
+        .filter((part): part is ToolPart => part.type === "tool")
+        .map((part) => ({ tool: part.tool, state: part.state })),
+    )
+  })
+  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
+  const running = createMemo(() => props.part.state.status === "running")
+  const duration = createMemo(() => {
+    const first = messages().find((x) => x.role === "user")?.time.created
+    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
+    if (!first || !assistant) return 0
+    return assistant - first
+  })
+  const content = createMemo(() => {
+    const title =
+      typeof props.input.description === "string" && props.input.description
+        ? props.input.description
+        : "Independent Research"
+    const content = [title]
+
+    if (running() && tools().length > 0) {
+      if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
+      else content.push(`↳ ${tools().length} toolcalls`)
+    }
+
+    if (props.part.state.status === "completed") {
+      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+    }
+
+    return content.join("\n")
+  })
+
+  return (
+    <InlineTool
+      icon="◌"
+      spinner={running()}
+      complete={props.input.description}
+      pending="Researching..."
       part={props.part}
       onClick={() => {
         if (props.metadata.sessionId) {

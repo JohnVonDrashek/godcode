@@ -22,6 +22,7 @@ import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
 import { CodeSearchTool } from "../../tool/codesearch"
 import { WebSearchTool } from "../../tool/websearch"
+import { IndependentResearchTool } from "../../tool/independent-research"
 import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
@@ -181,6 +182,21 @@ function task(info: ToolProps<typeof TaskTool>) {
     icon,
     title: name,
     description: desc ? `${agent} Agent` : undefined,
+  })
+}
+
+function research(info: ToolProps<typeof IndependentResearchTool>) {
+  const input = info.part.state.input
+  const status = info.part.state.status
+  const desc =
+    typeof input.description === "string" && input.description.trim().length > 0
+      ? input.description
+      : "Independent Research"
+  const icon = status === "error" ? "✗" : status === "running" ? "•" : "✓"
+  inline({
+    icon,
+    title: desc,
+    description: "Independent Research",
   })
 }
 
@@ -370,6 +386,11 @@ export const RunCommand = cmd({
         action: "deny",
         pattern: "*",
       },
+      {
+        permission: "agent_switch",
+        action: "deny",
+        pattern: "*",
+      },
     ]
 
     function title() {
@@ -422,6 +443,7 @@ export const RunCommand = cmd({
           if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
+          if (part.tool === "independent-research") return research(props<typeof IndependentResearchTool>(part))
           if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
           if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
           return fallback(part)
@@ -481,12 +503,13 @@ export const RunCommand = cmd({
 
             if (
               part.type === "tool" &&
-              part.tool === "task" &&
+              ["task", "independent-research"].includes(part.tool) &&
               part.state.status === "running" &&
               args.format !== "json"
             ) {
               if (toggles.get(part.id) === true) continue
-              task(props<typeof TaskTool>(part))
+              if (part.tool === "task") task(props<typeof TaskTool>(part))
+              if (part.tool === "independent-research") research(props<typeof IndependentResearchTool>(part))
               toggles.set(part.id, true)
             }
 
@@ -541,7 +564,8 @@ export const RunCommand = cmd({
           if ((event as any).type === "session.shadow_phase") {
             const props = (event as any).properties
             if (props.sessionID !== sessionID) continue
-            if (props.phase === "shadow_analyzing") UI.println(UI.Style.TEXT_DIM + "◐ shadow analyzing..." + UI.Style.TEXT_NORMAL)
+            if (props.phase === "shadow_analyzing")
+              UI.println(UI.Style.TEXT_DIM + "◐ shadow analyzing..." + UI.Style.TEXT_NORMAL)
             if (props.phase === "kicker_deciding") {
               // End the shadow section if streaming
               if (shadowHeaderPrinted) {

@@ -1,4 +1,5 @@
-import { PlanExitTool } from "./plan"
+import { PlanEnterTool, PlanExitTool } from "./plan"
+import { AgentSwitchTool } from "./switch"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
@@ -7,6 +8,7 @@ import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { IndependentResearchTool } from "./independent-research"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -123,15 +125,17 @@ export namespace ToolRegistry {
           EditTool,
           WriteTool,
           TaskTool,
+          IndependentResearchTool,
           WebFetchTool,
           TodoWriteTool,
           WebSearchTool,
           CodeSearchTool,
           SkillTool,
           ApplyPatchTool,
+          ...(question ? [AgentSwitchTool] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
-          ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
+          ...(question ? [PlanEnterTool, PlanExitTool] : []),
           ...custom,
         ]
       }

@@ -11,6 +11,7 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_INDEPENDENT_RESEARCH from "./prompt/independent-research.txt"
 import PROMPT_SHADOW from "../session/prompt/shadow.txt"
 import PROMPT_SHADOW_MAIN from "../session/prompt/shadow-main.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
@@ -31,6 +32,7 @@ export namespace Agent {
       name: z.string(),
       description: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
+      switch: z.boolean().optional(),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
       topP: z.number().optional(),
@@ -108,6 +110,7 @@ export namespace Agent {
             build: {
               name: "build",
               description: "The default agent. Executes tools based on configured permissions.",
+              switch: true,
               options: {},
               permission: Permission.merge(
                 defaults,
@@ -123,6 +126,7 @@ export namespace Agent {
             plan: {
               name: "plan",
               description: "Plan mode. Disallows all edit tools.",
+              switch: true,
               options: {},
               permission: Permission.merge(
                 defaults,
@@ -146,7 +150,8 @@ export namespace Agent {
             },
             shadow: {
               name: "shadow",
-              description: "Shadow mode. A read-only agent that runs in parallel with the main agent, providing a second perspective.",
+              description:
+                "Shadow mode. A read-only agent that runs in parallel with the main agent, providing a second perspective.",
               options: {},
               prompt: PROMPT_SHADOW,
               permission: Permission.merge(
@@ -230,6 +235,23 @@ export namespace Agent {
               mode: "subagent",
               native: true,
             },
+            "independent-research": {
+              name: "independent-research",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  webfetch: "allow",
+                }),
+                user,
+              ),
+              description:
+                "External research subagent that avoids codebase inspection and uses only webfetch to gather unbiased public information.",
+              prompt: PROMPT_INDEPENDENT_RESEARCH,
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
             compaction: {
               name: "compaction",
               mode: "primary",
@@ -299,6 +321,7 @@ export namespace Agent {
             item.temperature = value.temperature ?? item.temperature
             item.topP = value.top_p ?? item.topP
             item.mode = value.mode ?? item.mode
+            item.switch = value.switch ?? item.switch
             item.color = value.color ?? item.color
             item.hidden = value.hidden ?? item.hidden
             item.name = value.name ?? item.name

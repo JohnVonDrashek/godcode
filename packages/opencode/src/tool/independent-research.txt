@@ -1,0 +1,19 @@
+Launch a dedicated research subagent that only uses the `webfetch` tool.
+
+Use this tool when you want external, codebase-independent research.
+
+This subagent:
+- does not inspect the repository
+- does not use local file or shell tools
+- uses only `webfetch`
+- focuses on unbiased external research, docs, and public sources
+
+Use it for:
+- comparing libraries, APIs, or services
+- gathering up-to-date documentation or ecosystem guidance
+- validating assumptions without anchoring on the current codebase
+
+Do not use it for:
+- searching local files
+- making code changes
+- questions that require repository inspection

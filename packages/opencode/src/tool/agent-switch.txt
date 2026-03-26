@@ -1,0 +1,17 @@
+Use this tool when another primary agent would be a better fit for the next phase of work.
+
+This tool asks the user to confirm switching to a different agent.
+
+If the user explicitly asks to switch to another agent, call this tool instead of merely saying that you switched.
+
+Call this tool when:
+- A different agent would give a more appropriate style or workflow
+- You want to hand off from implementation to planning, or vice versa
+- A custom switch-enabled agent is better suited for the user's request
+
+Do NOT call this tool:
+- For subagents
+- For hidden agents
+- If you can continue effectively with the current agent
+
+Never claim that an agent switch already happened unless this tool call succeeded.
