@@ -51,6 +51,47 @@ describe("tool.google", () => {
     run.mockRestore()
   })
 
+  test("retries ddgr with fallback flags on HTTP 202", async () => {
+    const ask = spyOn(ctx, "ask").mockImplementation(async () => {})
+    const run = spyOn(ProcessModule.Process, "text")
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: Buffer.from("[]\n"),
+        stderr: Buffer.from("[ERROR] HTTP Error 202: Accepted\n"),
+        text: "[]\n",
+      })
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: Buffer.from("[]"),
+        stderr: Buffer.alloc(0),
+        text: JSON.stringify([
+          {
+            title: "How to Geek",
+            url: "https://www.howtogeek.com/example",
+            abstract: "fallback worked",
+          },
+        ]),
+      })
+
+    const tool = await GoogleTool.init()
+    const result = await tool.execute({ query: "discord alternatives self-hosted", numResults: 5 }, ctx)
+
+    expect(run).toHaveBeenNthCalledWith(1, ["ddgr", "--json", "--np", "-n", "5", "discord alternatives self-hosted"], {
+      abort: ctx.abort,
+    })
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      ["ddgr", "--json", "--np", "--noua", "--unsafe", "-n", "5", "discord alternatives self-hosted"],
+      {
+        abort: ctx.abort,
+      },
+    )
+    expect(result.output).toContain("How to Geek")
+
+    ask.mockRestore()
+    run.mockRestore()
+  })
+
   test("registers in the tool registry", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

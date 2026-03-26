@@ -169,9 +169,8 @@ export namespace ToolRegistry {
           Promise.all(
             allTools
               .filter((tool) => {
-                // Enable websearch/codesearch for zen users OR via enable flag
-                if (tool.id === "codesearch" || tool.id === "websearch") {
-                  if (tool.id === "websearch" && agent?.name === "independent-research") return true
+                // Enable codesearch for zen users OR via enable flag
+                if (tool.id === "codesearch") {
                   return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
                 }
 

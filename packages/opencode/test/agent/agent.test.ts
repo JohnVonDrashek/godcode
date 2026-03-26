@@ -4,6 +4,8 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
+import { ProviderID, ModelID } from "../../src/provider/schema"
+import { ToolRegistry } from "../../src/tool/registry"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
@@ -44,6 +46,23 @@ test("build agent has correct default properties", async () => {
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "websearch")).toBe("allow")
+    },
+  })
+})
+
+test("build exposes websearch in tool registry", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build).toBeDefined()
+      const tools = await ToolRegistry.tools(
+        { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.4") },
+        build,
+      )
+      expect(tools.map((item) => item.id)).toContain("websearch")
     },
   })
 })

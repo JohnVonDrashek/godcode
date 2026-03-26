@@ -9,6 +9,19 @@ const Result = z.object({
   abstract: z.string().optional(),
 })
 
+async function search(
+  query: string,
+  numResults: number,
+  abort: AbortSignal,
+  opts?: { noua?: boolean; unsafe?: boolean },
+) {
+  const args = ["ddgr", "--json", "--np"]
+  if (opts?.noua) args.push("--noua")
+  if (opts?.unsafe) args.push("--unsafe")
+  args.push("-n", String(numResults), query)
+  return Process.text(args, { abort })
+}
+
 export const GoogleTool = Tool.define("google", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -27,17 +40,29 @@ export const GoogleTool = Tool.define("google", {
     })
 
     let text = ""
+    let err = ""
+    const num = params.numResults ?? 8
 
     try {
-      text = await Process.text(["ddgr", "--json", "--np", "-n", String(params.numResults ?? 8), params.query], {
-        abort: ctx.abort,
-      }).then((x) => x.text.trim())
+      const first = await search(params.query, num, ctx.abort)
+      text = first.text.trim()
+      err = first.stderr.toString().trim()
+
+      if ((!text || text === "[]") && err.includes("HTTP Error 202")) {
+        const retry = await search(params.query, num, ctx.abort, { noua: true, unsafe: true })
+        text = retry.text.trim()
+        err = retry.stderr.toString().trim()
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes("spawn ddgr") || msg.includes("ddgr ENOENT")) {
         throw new Error("ddgr is not installed. Install it first to use this tool.")
       }
       throw err
+    }
+
+    if (err && (!text || text === "[]")) {
+      throw new Error(`google search failed: ${err}`)
     }
 
     if (!text) {

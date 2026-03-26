@@ -117,6 +117,7 @@ export namespace Agent {
                 Permission.fromConfig({
                   question: "allow",
                   plan_enter: "allow",
+                  websearch: "allow",
                 }),
                 user,
               ),
