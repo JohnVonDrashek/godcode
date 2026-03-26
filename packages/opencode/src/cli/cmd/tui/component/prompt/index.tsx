@@ -1,4 +1,14 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  TextareaRenderable,
+  MouseEvent,
+  PasteEvent,
+  decodePasteBytes,
+  t,
+  dim,
+  fg,
+  RGBA,
+} from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -18,7 +28,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -78,6 +88,7 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
+  const term = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
 
@@ -641,7 +652,7 @@ export function Prompt(props: PromptProps) {
           model: selectedModel,
           variant,
           // shadowModel is not yet in generated SDK types
-          ...(shadowModelSelection ? { shadowModel: shadowModelSelection } as any : {}),
+          ...(shadowModelSelection ? ({ shadowModel: shadowModelSelection } as any) : {}),
           parts: [
             {
               id: PartID.ascending(),
@@ -765,6 +776,14 @@ export function Prompt(props: PromptProps) {
     if (variants.length === 0) return false
     const current = local.model.variant.current()
     return !!current
+  })
+
+  const tip = createMemo(() => {
+    const width = term().width
+    if (width < 90) return 1
+    if (width < 115) return 2
+    if (width < 140) return 3
+    return 4
   })
 
   const placeholderText = createMemo(() => {
@@ -1033,9 +1052,12 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
                   <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>
-                    <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
-                    </text>
+                    <box flexDirection="row" gap={1}>
+                      <text>
+                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                      </text>
+                      <text fg={theme.textMuted}>{keybind.print("variant_cycle")}</text>
+                    </box>
                   </Show>
                   <Show when={local.agent.current().name === "shadow" && local.model.shadow.parsed()}>
                     <text fg={theme.textMuted}>·</text>
@@ -1149,7 +1171,11 @@ export function Prompt(props: PromptProps) {
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <spinner color={theme.textMuted} frames={["◐", "◓", "◑", "◒"]} interval={120} />
                   <text fg={theme.textMuted}>
-                    {shadowPhase() === "shadow_analyzing" ? "shadow analyzing" : shadowPhase() === "shadow_waiting" ? "waiting for main agent" : "kicker deciding"}
+                    {shadowPhase() === "shadow_analyzing"
+                      ? "shadow analyzing"
+                      : shadowPhase() === "shadow_waiting"
+                        ? "waiting for main agent"
+                        : "kicker deciding"}
                   </text>
                 </box>
               </Show>
@@ -1165,23 +1191,26 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <Show when={local.model.variant.list().length > 0}>
-                    <text fg={theme.text}>
-                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  <Show when={tip() >= 1}>
+                    <text fg={RGBA.fromHex("#ff9f1a")}>
+                      /connect <span style={{ fg: theme.textMuted }}>providers</span>
                     </text>
                   </Show>
-                  <text fg={RGBA.fromHex("#ff9f1a")}>
-                    /connect <span style={{ fg: theme.textMuted }}>providers</span>
-                  </text>
-                  <text fg={RGBA.fromHex("#1ab2ff")}>
-                    /models <span style={{ fg: theme.textMuted }}>switch</span>
-                  </text>
-                  <text fg={RGBA.fromHex("#ff1a1a")}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
-                  </text>
-                  <text fg={RGBA.fromHex("#bf5fff")}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
+                  <Show when={tip() >= 2}>
+                    <text fg={RGBA.fromHex("#1ab2ff")}>
+                      /models <span style={{ fg: theme.textMuted }}>switch</span>
+                    </text>
+                  </Show>
+                  <Show when={tip() >= 3}>
+                    <text fg={RGBA.fromHex("#ff1a1a")}>
+                      {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                    </text>
+                  </Show>
+                  <Show when={tip() >= 4}>
+                    <text fg={RGBA.fromHex("#bf5fff")}>
+                      {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
