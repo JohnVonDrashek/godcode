@@ -159,6 +159,7 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   "*": "deny",
+                  google: "allow",
                   grep: "allow",
                   glob: "allow",
                   list: "allow",
@@ -215,6 +216,7 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   "*": "deny",
+                  google: "allow",
                   grep: "allow",
                   glob: "allow",
                   list: "allow",
@@ -265,6 +267,9 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   "*": "deny",
+                  google: "allow",
+                  websearch: "allow",
+                  webfetch: "allow",
                 }),
                 user,
               ),
@@ -281,6 +286,9 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   "*": "deny",
+                  google: "allow",
+                  websearch: "allow",
+                  webfetch: "allow",
                 }),
                 user,
               ),
@@ -296,6 +304,9 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   "*": "deny",
+                  google: "allow",
+                  websearch: "allow",
+                  webfetch: "allow",
                 }),
                 user,
               ),
