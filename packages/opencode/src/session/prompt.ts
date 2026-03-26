@@ -683,8 +683,13 @@ export namespace SessionPrompt {
       // The shadow will self-inject a kick message and resume the loop if needed
       if (step === 1 && lastUser.agent === "shadow" && !shadowKicked && !session.parentID) {
         const shadowAbort = new AbortController()
+        // Abort the shadow when the main session is interrupted
+        const abortShadowOnCancel = () => shadowAbort.abort()
+        abort.addEventListener("abort", abortShadowOnCancel)
         let resolveMainDone: (output: string) => void
-        const mainDonePromise = new Promise<string>((r) => { resolveMainDone = r })
+        const mainDonePromise = new Promise<string>((r) => {
+          resolveMainDone = r
+        })
         shadowNotifyMainDone = (messageID: MessageID) => {
           MessageV2.parts(messageID).then((parts) => {
             const text = parts
@@ -697,7 +702,8 @@ export namespace SessionPrompt {
         }
         // Shadow model priority: user message > shadow agent config > main model
         const shadowAgent = await Agent.get("shadow")
-        const shadowModel = lastUser.shadowModel ?? shadowAgent?.model ?? { providerID: model.providerID, modelID: model.id }
+        const shadowModel = lastUser.shadowModel ??
+          shadowAgent?.model ?? { providerID: model.providerID, modelID: model.id }
         shadowPipelinePromise = runShadowPipeline({
           sessionID,
           model: shadowModel,
@@ -1670,6 +1676,81 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const lastUserMsg = input.messages.findLast((m) => m.info.role === "user")
       if (!lastUserMsg) return undefined
 
+      // Pre-populate shadow session with full conversation history as synthetic messages
+      // so shadow has full context that the main agent sees
+      for (const msg of input.messages) {
+        const msgInfo = msg.info
+        if (msgInfo.id === lastUserMsg.info.id) continue // Skip last message, will add as real prompt
+
+        if (msgInfo.role === "user") {
+          const syntheticMsg: MessageV2.User = {
+            id: MessageID.make(msgInfo.id),
+            sessionID: shadowSession.id,
+            role: "user",
+            time: { created: msgInfo.time.created },
+            agent: "shadow",
+            model: input.model,
+          }
+          await Session.updateMessage(syntheticMsg)
+
+          for (const part of msg.parts) {
+            if (part.type === "text") {
+              await Session.updatePart({
+                id: PartID.ascending(),
+                messageID: syntheticMsg.id,
+                sessionID: shadowSession.id,
+                type: "text",
+                text: part.text,
+                synthetic: true,
+              })
+            }
+          }
+        } else if (msgInfo.role === "assistant") {
+          const assistantInfo = msgInfo as MessageV2.Assistant
+          const syntheticMsg: MessageV2.Assistant = {
+            id: MessageID.make(assistantInfo.id),
+            sessionID: shadowSession.id,
+            role: "assistant",
+            mode: assistantInfo.mode ?? "shadow-main",
+            time: { created: assistantInfo.time.created },
+            agent: "shadow-main",
+            modelID: input.model.modelID,
+            providerID: input.model.providerID,
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            parentID: assistantInfo.parentID
+              ? MessageID.make(assistantInfo.parentID)
+              : MessageID.make(assistantInfo.id),
+            path: assistantInfo.path ?? { cwd: Instance.directory, root: Instance.worktree },
+          }
+          await Session.updateMessage(syntheticMsg)
+
+          for (const part of msg.parts) {
+            if (part.type === "text") {
+              await Session.updatePart({
+                id: PartID.ascending(),
+                messageID: syntheticMsg.id,
+                sessionID: shadowSession.id,
+                type: "text",
+                text: part.text,
+                synthetic: true,
+              })
+            } else if (part.type === "tool") {
+              const toolPart = part as MessageV2.ToolPart
+              await Session.updatePart({
+                id: PartID.ascending(),
+                messageID: syntheticMsg.id,
+                sessionID: shadowSession.id,
+                type: "tool",
+                tool: toolPart.tool,
+                callID: toolPart.callID,
+                state: toolPart.state,
+              })
+            }
+          }
+        }
+      }
+
       const userTextParts = lastUserMsg.parts
         .filter((p) => p.type === "text" && !p.synthetic)
         .map((p) => (p as MessageV2.TextPart).text)
@@ -1714,8 +1795,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   const KickerDecision = z.object({
     shouldKick: z.boolean().describe("Whether the main agent missed something important enough to warrant a kick"),
-    reason: z.string().min(10).describe("REQUIRED: Explain why you are or are not kicking. Must be a real explanation, never empty."),
-    feedback: z.string().describe("If kicking, the actionable feedback to send to the main agent. If not kicking, summarize what the main agent got right."),
+    reason: z
+      .string()
+      .min(10)
+      .describe("REQUIRED: Explain why you are or are not kicking. Must be a real explanation, never empty."),
+    feedback: z
+      .string()
+      .describe(
+        "If kicking, the actionable feedback to send to the main agent. If not kicking, summarize what the main agent got right.",
+      ),
   })
 
   /**
@@ -1725,7 +1813,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   async function runKickerDecision(input: {
     sessionID: SessionID
     model: { providerID: ProviderID; modelID: ModelID }
-    userPrompt: string
+    messages: MessageV2.WithParts[]
     shadowAnalysis: string
     mainAgentOutput: string
     abort: AbortSignal
@@ -1733,6 +1821,28 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     try {
       const resolved = await Provider.getModel(input.model.providerID, input.model.modelID)
       const language = await Provider.getLanguage(resolved)
+
+      // Format full conversation history for kicker context
+      const conversationLines: string[] = []
+      for (const msg of input.messages) {
+        if (msg.info.role === "user") {
+          const textParts = msg.parts
+            .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+            .map((p) => p.text)
+            .join("\n")
+          if (textParts.trim()) {
+            conversationLines.push(`USER (addressing main agent): ${textParts}`)
+          }
+        } else if (msg.info.role === "assistant") {
+          const textParts = msg.parts
+            .filter((p): p is MessageV2.TextPart => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+          if (textParts.trim()) {
+            conversationLines.push(`MAIN AGENT: ${textParts}`)
+          }
+        }
+      }
 
       const result = streamObject({
         model: language,
@@ -1746,16 +1856,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           },
           {
             role: "user" as const,
-            content: `## User's original request:
-${input.userPrompt}
+            content: `## Full conversation history (user is always addressing the main agent, not you):
+${conversationLines.join("\n\n")}
 
 ## Shadow's testing analysis:
 ${input.shadowAnalysis}
 
-## Main agent's output:
+## Main agent's final output:
 ${input.mainAgentOutput}
 
-Based on comparing the shadow's testing analysis with the main agent's output, should you kick the main agent?`,
+Based on the full conversation, the shadow's testing analysis, and the main agent's output, should you kick the main agent?`,
           },
         ],
       })
@@ -1815,7 +1925,9 @@ Based on comparing the shadow's testing analysis with the main agent's output, s
           model: input.model,
           messages: input.messages,
           abort: input.abort,
-          onSessionCreated: (id) => { shadowSessionID = id },
+          onSessionCreated: (id) => {
+            shadowSessionID = id
+          },
         })
         unsub()
         if (!analysisResult || input.abort.aborted) return
@@ -1831,19 +1943,13 @@ Based on comparing the shadow's testing analysis with the main agent's output, s
         // Wait for main agent to finish before kicker can compare
         const mainAgentOutput = await input.getMainAgentOutput()
 
-        const userPrompt = input.messages
-          .findLast((m) => m.info.role === "user")
-          ?.parts.filter((p) => p.type === "text" && !p.synthetic)
-          .map((p) => (p as MessageV2.TextPart).text)
-          .join("\n") ?? ""
-
         Bus.publish(Session.Event.ShadowPhase, { sessionID: input.sessionID, phase: "kicker_deciding" })
 
         // Phase 2: kicker decision via structured JSON
         const kickDecision = await runKickerDecision({
           sessionID: input.sessionID,
           model: input.model,
-          userPrompt,
+          messages: input.messages,
           shadowAnalysis: analysisResult.shadowOutput,
           mainAgentOutput,
           abort: input.abort,

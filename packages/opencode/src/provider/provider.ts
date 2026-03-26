@@ -3,7 +3,7 @@ import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import { generateText, NoSuchModelError, type Provider as SDK } from "ai"
+import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Hash } from "../util/hash"
@@ -1467,74 +1467,63 @@ export namespace Provider {
     return undefined
   }
 
+  // Default base URLs for providers whose SDKs have hardcoded endpoints.
+  // Used when models.dev data doesn't include an `api` field.
+  const SDK_DEFAULT_URLS: Record<string, string> = {
+    anthropic: "https://api.anthropic.com/v1",
+    openai: "https://api.openai.com/v1",
+    groq: "https://api.groq.com/openai/v1",
+    mistral: "https://api.mistral.ai/v1",
+    xai: "https://api.x.ai/v1",
+    cerebras: "https://api.cerebras.ai/v1",
+    cohere: "https://api.cohere.com/v2",
+    deepinfra: "https://api.deepinfra.com/v1/openai",
+    togetherai: "https://api.together.xyz/v1",
+    perplexity: "https://api.perplexity.ai",
+  }
+
   export async function test(providerID: ProviderID, apiKey: string) {
     const modelsDev = await ModelsDev.get()
     const providerData = modelsDev[providerID]
     if (!providerData) throw new Error(`Unknown provider: ${providerID}`)
 
-    // Find a small/cheap model to test with
-    const smallPriority = [
-      "claude-haiku-4-5",
-      "claude-haiku-4.5",
-      "3-5-haiku",
-      "3.5-haiku",
-      "gemini-3-flash",
-      "gemini-2.5-flash",
-      "gpt-5-nano",
-      "gpt-5-mini",
-      "gpt-4.1-mini",
-      "gpt-4.1-nano",
-      "mistral-small",
-      "llama",
-      "qwen",
-    ]
-
-    const modelIDs = Object.keys(providerData.models)
-    let testModelID: string | undefined
-    for (const hint of smallPriority) {
-      testModelID = modelIDs.find((m) => m.includes(hint))
-      if (testModelID) break
+    // Resolve the base URL: models.dev data → model-level override → SDK default
+    let baseURL = providerData.api
+    if (!baseURL) {
+      const firstModel = Object.values(providerData.models)[0]
+      baseURL = firstModel?.provider?.api
     }
-    if (!testModelID) testModelID = modelIDs[0]
-    if (!testModelID) throw new Error(`No models found for provider: ${providerID}`)
-
-    const modelData = providerData.models[testModelID]
-    const npm = modelData.provider?.npm ?? providerData.npm ?? "@ai-sdk/openai-compatible"
-    const baseURL = modelData.provider?.api ?? providerData.api
-
-    const bundledFn = BUNDLED_PROVIDERS[npm]
-    if (!bundledFn) throw new Error(`Provider SDK not bundled: ${npm}`)
-
-    const sdkOptions: Record<string, any> = {
-      name: providerID,
-      apiKey,
+    if (!baseURL) {
+      baseURL = SDK_DEFAULT_URLS[providerID]
     }
-    if (baseURL) sdkOptions.baseURL = baseURL
-    const sdk = bundledFn(sdkOptions) as SDK
+    if (!baseURL) throw new Error(`No API URL found for provider: ${providerID}`)
 
-    const apiModelID = modelData.id
-    const customLoader = CUSTOM_LOADERS[providerID]
-    let languageModel
-    if (customLoader) {
-      const loaderResult = await customLoader(fromModelsDevProvider(providerData))
-      if (loaderResult.getModel) {
-        languageModel = await loaderResult.getModel(sdk, apiModelID)
-      }
-    }
-    if (!languageModel) {
-      languageModel = sdk.languageModel(apiModelID)
+    // Use the models list endpoint to validate the API key.
+    // This avoids depending on any specific model which may be decommissioned.
+    const modelsURL = baseURL.replace(/\/+$/, "") + "/models"
+
+    const headers: Record<string, string> = {}
+    if (providerID === "anthropic") {
+      headers["x-api-key"] = apiKey
+      headers["anthropic-version"] = "2023-06-01"
+    } else {
+      headers["Authorization"] = `Bearer ${apiKey}`
     }
 
-    const result = await generateText({
-      model: languageModel,
-      prompt: "Say hello in one short sentence.",
-      maxOutputTokens: 50,
-      abortSignal: AbortSignal.timeout(15000),
+    const response = await fetch(modelsURL, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(15000),
     })
 
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      throw new Error(`Provider API key validation failed (${response.status}): ${body}`)
+    }
+
     return {
-      message: result.text,
-      model: testModelID,
+      message: "API key is valid",
+      model: "n/a",
     }
   }
 

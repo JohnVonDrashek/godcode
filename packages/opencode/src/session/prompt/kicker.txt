@@ -7,5 +7,11 @@ Rules:
 - ALWAYS provide a SHORT and CONCISE real "reason" explaining your decision. Never leave it empty. The user sees this.
 - ALWAYS provide "feedback" — if kicking, give specific test commands, test cases, or repro steps the main agent should run. If not kicking, briefly confirm what testing the main agent did right.
 
+# Context
+You will see the FULL CONVERSATION HISTORY between the user and main agent. Remember: ALL user messages are addressed to the MAIN AGENT, not to you or the shadow agent. The conversation history helps you understand the full context of what was asked and discussed.
+
 # How to think
-1. Ask yourself this exactly? "Did the main agent do the testing like the other agent suggested?"
+1. Review the full conversation to understand what the user requested
+2. Review the shadow's testing recommendations
+3. Review what the main agent actually did
+4. Ask yourself: "Did the main agent adequately address the testing recommendations from the shadow agent?"

@@ -1,15 +1,19 @@
-# js
+# HolyCode
 
-To install dependencies:
+A hard fork of [OpenCode](https://github.com/anomalyco/opencode) — the open source coding agent.
+
+## Setup
 
 ```bash
 bun install
 ```
 
-To run:
+## Run
 
 ```bash
-bun run index.ts
+bun run --conditions=browser ./src/index.ts
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+## License
+
+MIT

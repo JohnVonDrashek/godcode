@@ -1,4 +1,4 @@
-# opencode database guide
+# holycode database guide
 
 ## Database
 
@@ -9,7 +9,7 @@
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
 
-# opencode Effect rules
+# holycode Effect rules
 
 Use these rules when writing or migrating Effect code.
 
