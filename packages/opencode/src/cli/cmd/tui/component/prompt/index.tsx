@@ -9,7 +9,19 @@ import {
   fg,
   RGBA,
 } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  type JSX,
+  onMount,
+  createSignal,
+  onCleanup,
+  on,
+  Show,
+  Switch,
+  Match,
+  For,
+} from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { Filesystem } from "@/util/filesystem"
@@ -779,11 +791,67 @@ export function Prompt(props: PromptProps) {
   })
 
   const tip = createMemo(() => {
-    const width = term().width
-    if (width < 90) return 1
-    if (width < 115) return 2
-    if (width < 140) return 3
-    return 4
+    const phase = shadowPhase()
+    const left = (() => {
+      const s = status()
+      if (s.type !== "busy") return 0
+      const interrupt = Bun.stringWidth(store.interrupt > 0 ? "esc again to interrupt" : "esc interrupt")
+      const shadow =
+        phase === "shadow_analyzing"
+          ? Bun.stringWidth("shadow analyzing") + 4
+          : phase === "shadow_waiting"
+            ? Bun.stringWidth("waiting for main agent") + 4
+            : phase === "kicker_deciding"
+              ? Bun.stringWidth("kicker deciding") + 4
+              : 0
+      return interrupt + shadow + 6
+    })()
+    const max = Math.max(0, term().width - left - 4)
+    const all = [
+      {
+        color: RGBA.fromHex("#ff9f1a"),
+        title: "/connect",
+        hint: "providers",
+        full: Bun.stringWidth("/connect providers"),
+        compact: Bun.stringWidth("/connect"),
+      },
+      {
+        color: RGBA.fromHex("#1ab2ff"),
+        title: "/models",
+        hint: "switch",
+        full: Bun.stringWidth("/models switch"),
+        compact: Bun.stringWidth("/models"),
+      },
+      {
+        color: RGBA.fromHex("#ff1a1a"),
+        title: keybind.print("agent_cycle"),
+        hint: "agents",
+        full: Bun.stringWidth(`${keybind.print("agent_cycle")} agents`),
+        compact: Bun.stringWidth(keybind.print("agent_cycle")),
+      },
+      {
+        color: RGBA.fromHex("#bf5fff"),
+        title: keybind.print("command_list"),
+        hint: "commands",
+        full: Bun.stringWidth(`${keybind.print("command_list")} commands`),
+        compact: Bun.stringWidth(keybind.print("command_list")),
+      },
+    ]
+    let used = 0
+    return all.flatMap((item) => {
+      const gap = used === 0 ? 0 : 2
+      const full = used + gap + item.full
+      if (full <= max) {
+        used = full
+        return [{ ...item, short: false }]
+      }
+      const compact = used + gap + item.compact
+      if (compact <= max) {
+        used = compact
+        return [{ ...item, short: true }]
+      }
+      return []
+    })
   })
 
   const placeholderText = createMemo(() => {
@@ -1191,26 +1259,16 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <Show when={tip() >= 1}>
-                    <text fg={RGBA.fromHex("#ff9f1a")}>
-                      /connect <span style={{ fg: theme.textMuted }}>providers</span>
-                    </text>
-                  </Show>
-                  <Show when={tip() >= 2}>
-                    <text fg={RGBA.fromHex("#1ab2ff")}>
-                      /models <span style={{ fg: theme.textMuted }}>switch</span>
-                    </text>
-                  </Show>
-                  <Show when={tip() >= 3}>
-                    <text fg={RGBA.fromHex("#ff1a1a")}>
-                      {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
-                    </text>
-                  </Show>
-                  <Show when={tip() >= 4}>
-                    <text fg={RGBA.fromHex("#bf5fff")}>
-                      {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                    </text>
-                  </Show>
+                  <For each={tip()}>
+                    {(item) => (
+                      <text fg={item.color}>
+                        {item.title}
+                        <Show when={!item.short}>
+                          <span style={{ fg: theme.textMuted }}> {item.hint}</span>
+                        </Show>
+                      </text>
+                    )}
+                  </For>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
