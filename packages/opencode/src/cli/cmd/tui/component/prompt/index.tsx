@@ -86,6 +86,8 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
+  let esc = 0
+  let clear: ReturnType<typeof setTimeout> | undefined
 
   const keybind = useKeybind()
   const local = useLocal()
@@ -122,6 +124,30 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
+  onCleanup(() => {
+    if (clear) clearTimeout(clear)
+  })
+
+  function hint(show: boolean) {
+    if (clear) clearTimeout(clear)
+    setStore("clear", show ? 1 : 0)
+    if (!show) return
+    clear = setTimeout(() => {
+      setStore("clear", 0)
+    }, 1200)
+  }
+
+  function wipe() {
+    hint(false)
+    input.clear()
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
+  }
+
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
@@ -151,6 +177,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    clear: number
     placeholder: number
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
@@ -161,6 +188,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    clear: 0,
   })
 
   createEffect(
@@ -202,8 +230,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
+          wipe()
           dialog.clear()
         },
       },
@@ -400,13 +427,7 @@ export function Prompt(props: PromptProps) {
       input.gotoBufferEnd()
     },
     reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
+      wipe()
     },
     submit() {
       submit()
@@ -948,6 +969,10 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (e.name !== "escape") {
+                  esc = 0
+                  hint(false)
+                }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
@@ -966,13 +991,7 @@ export function Prompt(props: PromptProps) {
                   // If no image, let the default paste behavior continue
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
-                  input.clear()
-                  input.extmarks.clear()
-                  setStore("prompt", {
-                    input: "",
-                    parts: [],
-                  })
-                  setStore("extmarkToPartIndex", new Map())
+                  wipe()
                   return
                 }
                 if (keybind.match("app_exit", e)) {
@@ -991,12 +1010,34 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "shell") {
                   if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                    esc = 0
+                    hint(false)
                     setStore("mode", "normal")
                     e.preventDefault()
                     return
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
+                if (
+                  e.name === "escape" &&
+                  !e.defaultPrevented &&
+                  !autocomplete.visible &&
+                  status().type === "idle" &&
+                  store.prompt.input &&
+                  store.mode === "normal"
+                ) {
+                  const now = Date.now()
+                  if (now - esc < 500) {
+                    esc = 0
+                    wipe()
+                    e.preventDefault()
+                    return
+                  }
+                  esc = now
+                  hint(true)
+                  e.preventDefault()
+                  return
+                }
                 if (!autocomplete.visible) {
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
@@ -1124,8 +1165,14 @@ export function Prompt(props: PromptProps) {
                       <text>
                         <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                       </text>
-                      <text fg={theme.textMuted}>{keybind.print("variant_cycle")}</text>
+                      <text fg={store.clear > 0 ? theme.warning : theme.textMuted}>
+                        {store.clear > 0 ? "esc again to clear" : keybind.print("variant_cycle")}
+                      </text>
                     </box>
+                  </Show>
+                  <Show when={store.clear > 0 && !showVariant()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.warning}>esc again to clear</text>
                   </Show>
                   <Show when={local.agent.current().name === "shadow" && local.model.shadow.parsed()}>
                     <text fg={theme.textMuted}>·</text>
