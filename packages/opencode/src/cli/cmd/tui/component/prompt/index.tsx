@@ -119,10 +119,13 @@ export function Prompt(props: PromptProps) {
 
   const textareaKeybindings = useTextareaKeybindings()
 
+  const commandStyleId = syntax().getStyleId("extmark.command")!
+  const skillStyleId = syntax().getStyleId("extmark.skill")!
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
+  let promptCommandTypeId = 0
 
   onCleanup(() => {
     if (clear) clearTimeout(clear)
@@ -189,6 +192,41 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
     clear: 0,
+  })
+
+  const slash = createMemo(() => {
+    const map = new Map<string, "command" | "skill">()
+    for (const item of command.slashes()) {
+      map.set(item.display.slice(1), "command")
+    }
+    for (const item of sync.data.command) {
+      map.set(item.name, item.source === "skill" ? "skill" : "command")
+    }
+    return map
+  })
+
+  function syncCommandExtmark() {
+    if (!input || input.isDestroyed || promptCommandTypeId === 0) return
+    for (const mark of input.extmarks.getAllForTypeId(promptCommandTypeId)) {
+      input.extmarks.delete(mark.id)
+    }
+    const match = store.prompt.input.match(/^\/\S+/)
+    if (!match) return
+    const kind = slash().get(match[0].slice(1))
+    if (!kind) return
+    if (kind === "command" && /\s/.test(store.prompt.input[match[0].length] ?? "")) return
+    input.extmarks.create({
+      start: 0,
+      end: Bun.stringWidth(match[0]),
+      styleId: kind === "skill" ? skillStyleId : commandStyleId,
+      typeId: promptCommandTypeId,
+    })
+  }
+
+  createEffect(() => {
+    store.prompt.input
+    slash()
+    syncCommandExtmark()
   })
 
   createEffect(
@@ -1136,6 +1174,9 @@ export function Prompt(props: PromptProps) {
                 input = r
                 if (promptPartTypeId === 0) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")
+                }
+                if (promptCommandTypeId === 0) {
+                  promptCommandTypeId = input.extmarks.registerType("prompt-command")
                 }
                 props.ref?.(ref)
                 setTimeout(() => {

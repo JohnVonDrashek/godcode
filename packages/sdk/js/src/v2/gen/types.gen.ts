@@ -133,11 +133,16 @@ export type UserMessage = {
     providerID: string
     modelID: string
   }
+  isolated?: boolean
   system?: string
   tools?: {
     [key: string]: boolean
   }
   variant?: string
+  shadowModel?: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export type ProviderAuthError = {
@@ -882,6 +887,43 @@ export type EventSessionError = {
   }
 }
 
+export type EventSessionShadowPhase = {
+  type: "session.shadow_phase"
+  properties: {
+    sessionID: string
+    phase: "shadow_analyzing" | "shadow_waiting" | "kicker_deciding" | "done"
+  }
+}
+
+export type EventSessionShadowOutput = {
+  type: "session.shadow_output"
+  properties: {
+    sessionID: string
+    preview: string
+    fullOutput: string
+  }
+}
+
+export type EventSessionKickerStream = {
+  type: "session.kicker_stream"
+  properties: {
+    sessionID: string
+    partial: {
+      reason?: string
+    }
+  }
+}
+
+export type EventSessionKickerDecision = {
+  type: "session.kicker_decision"
+  properties: {
+    sessionID: string
+    kicked: boolean
+    reason: string
+    feedback?: string
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -994,6 +1036,10 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventSessionShadowPhase
+  | EventSessionShadowOutput
+  | EventSessionKickerStream
+  | EventSessionKickerDecision
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1015,7 +1061,7 @@ export type GlobalEvent = {
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
 /**
- * Server configuration for opencode serve and web commands
+ * Server configuration for holycode serve and web commands
  */
 export type ServerConfig = {
   /**
@@ -1031,7 +1077,7 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
-   * Custom domain name for mDNS service (default: opencode.local)
+   * Custom domain name for mDNS service (default: holycode.local)
    */
   mdnsDomain?: string
   /**
@@ -1093,6 +1139,10 @@ export type AgentConfig = {
    */
   description?: string
   mode?: "subagent" | "primary" | "all"
+  /**
+   * Allow switching into this primary agent via agent switch tools
+   */
+  switch?: boolean
   /**
    * Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)
    */
@@ -1907,6 +1957,7 @@ export type Agent = {
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
+  switch?: boolean
   native?: boolean
   hidden?: boolean
   topP?: number
@@ -3349,7 +3400,12 @@ export type SessionPromptData = {
     }
     format?: OutputFormat
     system?: string
+    isolated?: boolean
     variant?: string
+    shadowModel?: {
+      providerID: string
+      modelID: string
+    }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3549,7 +3605,12 @@ export type SessionPromptAsyncData = {
     }
     format?: OutputFormat
     system?: string
+    isolated?: boolean
     variant?: string
+    shadowModel?: {
+      providerID: string
+      modelID: string
+    }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -4059,6 +4120,15 @@ export type ProviderTestData = {
   }
   url: "/provider/{providerID}/test"
 }
+
+export type ProviderTestErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderTestError = ProviderTestErrors[keyof ProviderTestErrors]
 
 export type ProviderTestResponses = {
   /**
@@ -5023,10 +5093,46 @@ export type AppSkillsResponses = {
     description: string
     location: string
     content: string
+    kind: "project" | "global" | "config" | "remote"
+    deletable: boolean
   }>
 }
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
+
+export type AppSkillRemoveData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/{name}"
+}
+
+export type AppSkillRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AppSkillRemoveError = AppSkillRemoveErrors[keyof AppSkillRemoveErrors]
+
+export type AppSkillRemoveResponses = {
+  /**
+   * Skill deleted
+   */
+  200: boolean
+}
+
+export type AppSkillRemoveResponse = AppSkillRemoveResponses[keyof AppSkillRemoveResponses]
 
 export type LspStatusData = {
   body?: never

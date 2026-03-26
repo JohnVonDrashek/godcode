@@ -8,6 +8,8 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
+  const DIRS = [".holycode", ".opencode"]
+
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
     for (const file of [`${name}.jsonc`, `${name}.json`]) {
@@ -25,7 +27,7 @@ export namespace ConfigPaths {
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".holycode"],
+              targets: DIRS,
               start: directory,
               stop: worktree,
             }),
@@ -33,7 +35,7 @@ export namespace ConfigPaths {
         : []),
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".holycode"],
+          targets: DIRS,
           start: Global.Path.home,
           stop: Global.Path.home,
         }),

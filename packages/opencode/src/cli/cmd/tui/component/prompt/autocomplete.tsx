@@ -59,6 +59,7 @@ export type AutocompleteOption = {
   disabled?: boolean
   description?: string
   isDirectory?: boolean
+  color?: "default" | "warning" | "accent"
   onSelect?: () => void
   path?: string
 }
@@ -357,11 +358,11 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
-      if (serverCommand.source === "skill") continue
-      const label = serverCommand.source === "mcp" ? ":mcp" : ""
+      const label = serverCommand.source === "mcp" ? ":mcp" : serverCommand.source === "skill" ? ":skill" : ""
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
+        color: serverCommand.source === "skill" ? "warning" : serverCommand.source === "mcp" ? "accent" : "default",
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
           const cursor = props.input().logicalCursor
@@ -606,6 +607,13 @@ export function Autocomplete(props: {
 
   let scroll: ScrollBoxRenderable
 
+  function fg(option: AutocompleteOption, selected: boolean) {
+    if (selected) return selectedForeground(theme)
+    if (option.color === "warning") return theme.warning
+    if (option.color === "accent") return theme.accent
+    return theme.text
+  }
+
   return (
     <box
       visible={store.visible !== false}
@@ -650,7 +658,7 @@ export function Autocomplete(props: {
               }}
               onMouseUp={() => select()}
             >
-              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
+              <text fg={fg(option(), index === store.selected)} flexShrink={0}>
                 {option().display}
               </text>
               <Show when={option().description}>

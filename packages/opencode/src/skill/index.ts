@@ -1,5 +1,6 @@
 import os from "os"
 import path from "path"
+import { rm } from "fs/promises"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -24,12 +25,18 @@ export namespace Skill {
   const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
   const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
   const SKILL_PATTERN = "**/SKILL.md"
+  const REMOTE_ROOT = path.join(Global.Path.cache, "skills")
+
+  export const Kind = z.enum(["project", "global", "config", "remote"])
+  export type Kind = z.infer<typeof Kind>
 
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    kind: Kind,
+    deletable: z.boolean(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -66,9 +73,10 @@ export namespace Skill {
     readonly all: () => Effect.Effect<Info[]>
     readonly dirs: () => Effect.Effect<string[]>
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+    readonly remove: (name: string) => Effect.Effect<"ok" | "missing" | "readonly">
   }
 
-  const add = async (state: State, match: string) => {
+  const add = async (state: State, match: string, kind: Kind) => {
     const md = await ConfigMarkdown.parse(match).catch(async (err) => {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
@@ -98,10 +106,17 @@ export namespace Skill {
       description: parsed.data.description,
       location: match,
       content: md.content,
+      kind,
+      deletable: kind !== "remote",
     }
   }
 
-  const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
+  const scan = async (
+    state: State,
+    root: string,
+    pattern: string,
+    opts?: { dot?: boolean; scope?: string; kind?: Kind },
+  ) => {
     return Glob.scan(pattern, {
       cwd: root,
       absolute: true,
@@ -109,11 +124,28 @@ export namespace Skill {
       symlink: true,
       dot: opts?.dot,
     })
-      .then((matches) => Promise.all(matches.map((match) => add(state, match))))
+      .then((matches) => Promise.all(matches.map((match) => add(state, match, opts?.kind ?? "config"))))
       .catch((error) => {
         if (!opts?.scope) throw error
         log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
       })
+  }
+
+  const drop = async (state: State, name: string) => {
+    const skill = state.skills[name]
+    if (!skill) return "missing" as const
+    if (!skill.deletable || skill.kind === "remote" || skill.location.startsWith(REMOTE_ROOT))
+      return "readonly" as const
+
+    const dir = path.dirname(skill.location)
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+    })
+    delete state.skills[name]
+    state.dirs.delete(dir)
+    return "ok" as const
   }
 
   // TODO: Migrate to Effect
@@ -128,7 +160,7 @@ export namespace Skill {
         for (const dir of EXTERNAL_DIRS) {
           const root = path.join(Global.Path.home, dir)
           if (!(await Filesystem.isDir(root))) continue
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global", kind: "global" })
         }
 
         for await (const root of Filesystem.up({
@@ -136,12 +168,12 @@ export namespace Skill {
           start: directory,
           stop: worktree,
         })) {
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project", kind: "project" })
         }
       }
 
       for (const dir of await Config.directories()) {
-        await scan(state, dir, OPENCODE_SKILL_PATTERN)
+        await scan(state, dir, OPENCODE_SKILL_PATTERN, { kind: "config" })
       }
 
       const cfg = await Config.get()
@@ -153,13 +185,13 @@ export namespace Skill {
           continue
         }
 
-        await scan(state, dir, SKILL_PATTERN)
+        await scan(state, dir, SKILL_PATTERN, { kind: "config" })
       }
 
       for (const url of cfg.skills?.urls ?? []) {
         for (const dir of await Effect.runPromise(discovery.pull(url))) {
           state.dirs.add(dir)
-          await scan(state, dir, SKILL_PATTERN)
+          await scan(state, dir, SKILL_PATTERN, { kind: "remote" })
         }
       }
 
@@ -201,7 +233,7 @@ export namespace Skill {
 
       const all = Effect.fn("Skill.all")(function* () {
         const cache = yield* ensure()
-        return Object.values(cache.skills)
+        return Object.values(cache.skills).toSorted((a, b) => a.name.localeCompare(b.name))
       })
 
       const dirs = Effect.fn("Skill.dirs")(function* () {
@@ -216,7 +248,12 @@ export namespace Skill {
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
 
-      return Service.of({ get, all, dirs, available })
+      const del = Effect.fn("Skill.remove")(function* (name: string) {
+        const cache = yield* ensure()
+        return yield* Effect.promise(() => drop(cache, name))
+      })
+
+      return Service.of({ get, all, dirs, available, remove: del })
     }),
   )
 
@@ -258,5 +295,9 @@ export namespace Skill {
 
   export async function available(agent?: Agent.Info) {
     return runPromise((skill) => skill.available(agent))
+  }
+
+  export async function remove(name: string) {
+    return runPromise((skill) => skill.remove(name))
   }
 }

@@ -7,6 +7,8 @@ import type {
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
+  AppSkillRemoveErrors,
+  AppSkillRemoveResponses,
   AppSkillsResponses,
   Auth as Auth3,
   AuthRemoveErrors,
@@ -89,6 +91,7 @@ import type {
   ProviderOauthAuthorizeResponses,
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
+  ProviderTestErrors,
   ProviderTestResponses,
   PtyConnectErrors,
   PtyConnectResponses,
@@ -1867,7 +1870,12 @@ export class Session2 extends HeyApiClient {
       }
       format?: OutputFormat
       system?: string
+      isolated?: boolean
       variant?: string
+      shadowModel?: {
+        providerID: string
+        modelID: string
+      }
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1887,7 +1895,9 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
+            { in: "body", key: "isolated" },
             { in: "body", key: "variant" },
+            { in: "body", key: "shadowModel" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1999,7 +2009,12 @@ export class Session2 extends HeyApiClient {
       }
       format?: OutputFormat
       system?: string
+      isolated?: boolean
       variant?: string
+      shadowModel?: {
+        providerID: string
+        modelID: string
+      }
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -2019,7 +2034,9 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
+            { in: "body", key: "isolated" },
             { in: "body", key: "variant" },
+            { in: "body", key: "shadowModel" },
             { in: "body", key: "parts" },
           ],
         },
@@ -2673,10 +2690,10 @@ export class Provider extends HeyApiClient {
    */
   public test<ThrowOnError extends boolean = false>(
     parameters: {
+      providerID: string
       directory?: string
       workspace?: string
-      providerID: string
-      key: string
+      key?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2685,15 +2702,15 @@ export class Provider extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "providerID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { in: "path", key: "providerID" },
             { in: "body", key: "key" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).post<ProviderTestResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).post<ProviderTestResponses, ProviderTestErrors, ThrowOnError>({
       url: "/provider/{providerID}/test",
       ...options,
       ...params,
@@ -3793,6 +3810,40 @@ export class Command extends HeyApiClient {
   }
 }
 
+export class Skill extends HeyApiClient {
+  /**
+   * Delete skill
+   *
+   * Delete a filesystem-backed skill from the current OpenCode context.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<AppSkillRemoveResponses, AppSkillRemoveErrors, ThrowOnError>({
+      url: "/skill/{name}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class App extends HeyApiClient {
   /**
    * Write log
@@ -3897,6 +3948,11 @@ export class App extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _skill?: Skill
+  get skill(): Skill {
+    return (this._skill ??= new Skill({ client: this.client }))
   }
 }
 

@@ -331,6 +331,88 @@ description: A skill in the .agents/skills directory.
   })
 })
 
+test("removes project filesystem skills", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".claude", "skills", "remove-me")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: remove-me
+description: A removable test skill.
+---
+
+# Remove Me
+`,
+      )
+      return skillDir
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skill = await Skill.get("remove-me")
+      expect(skill?.deletable).toBe(true)
+      expect(await Skill.remove("remove-me")).toBe("ok")
+      expect(await Skill.get("remove-me")).toBeUndefined()
+      expect(await fs.stat(tmp.extra).catch(() => undefined)).toBeUndefined()
+    },
+  })
+})
+
+test("keeps remote skills read-only", async () => {
+  const fixture = path.join(import.meta.dir, "../fixture/skills")
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url)
+      if (!url.pathname.startsWith("/.well-known/skills/")) {
+        return new Response("Not Found", { status: 404 })
+      }
+      const file = url.pathname.replace("/.well-known/skills/", "")
+      const full = path.join(fixture, file)
+      try {
+        await fs.stat(full)
+        return new Response(Bun.file(full))
+      } catch {
+        return new Response("Not Found", { status: 404 })
+      }
+    },
+  })
+
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "holycode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skills: {
+            urls: [`http://localhost:${server.port}/.well-known/skills/`],
+          },
+        }),
+      )
+    },
+  })
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const skill = (await Skill.all())[0]
+        expect(skill).toBeDefined()
+        expect(skill!.deletable).toBe(false)
+        expect(await Skill.remove(skill!.name)).toBe("readonly")
+        expect(await Skill.get(skill!.name)).toBeDefined()
+      },
+    })
+  } finally {
+    server.stop()
+  }
+})
+
 test("properly resolves directories that skills live in", async () => {
   await using tmp = await tmpdir({
     git: true,

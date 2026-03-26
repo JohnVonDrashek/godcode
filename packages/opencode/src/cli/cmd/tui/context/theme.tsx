@@ -703,6 +703,20 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
+      scope: ["extmark.command"],
+      style: {
+        foreground: theme.info,
+        bold: true,
+      },
+    },
+    {
+      scope: ["extmark.skill"],
+      style: {
+        foreground: theme.warning,
+        bold: true,
+      },
+    },
+    {
       scope: ["extmark.file"],
       style: {
         foreground: theme.warning,

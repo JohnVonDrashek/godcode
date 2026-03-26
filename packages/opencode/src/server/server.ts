@@ -448,6 +448,50 @@ export namespace Server {
           return c.json(skills)
         },
       )
+      .delete(
+        "/skill/:name",
+        describeRoute({
+          summary: "Delete skill",
+          description: "Delete a filesystem-backed skill from the current OpenCode context.",
+          operationId: "app.skill.remove",
+          responses: {
+            200: {
+              description: "Skill deleted",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            name: z.string(),
+          }),
+        ),
+        async (c) => {
+          const name = c.req.valid("param").name
+          const result = await Skill.remove(name)
+          if (result === "missing") {
+            throw new NotFoundError({ message: `Skill \"${name}\" not found` })
+          }
+          if (result === "readonly") {
+            return c.json(
+              {
+                data: null,
+                errors: [{ message: "This skill is read-only" }],
+                success: false,
+              },
+              { status: 400 },
+            )
+          }
+          await Instance.dispose()
+          return c.json(true)
+        },
+      )
       .get(
         "/lsp",
         describeRoute({
