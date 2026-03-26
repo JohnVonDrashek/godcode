@@ -66,6 +66,24 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
+  function isolated(input?: { isolated?: boolean }) {
+    return input?.isolated === true
+  }
+
+  async function fetched(msgs: MessageV2.WithParts[], messageID: MessageID) {
+    if (
+      msgs.some((msg) =>
+        msg.parts.some((part) => part.type === "tool" && part.tool === "webfetch" && part.state.status === "completed"),
+      )
+    ) {
+      return true
+    }
+
+    return MessageV2.parts(messageID).then((parts) =>
+      parts.some((part) => part.type === "tool" && part.tool === "webfetch" && part.state.status === "completed"),
+    )
+  }
+
   const state = Instance.state(
     () => {
       const data: Record<
@@ -111,6 +129,7 @@ export namespace SessionPrompt {
       ),
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
+    isolated: z.boolean().optional(),
     variant: z.string().optional(),
     shadowModel: z
       .object({
@@ -331,6 +350,7 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+      const solo = isolated(lastUser)
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
@@ -607,11 +627,13 @@ export namespace SessionPrompt {
       }
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = await insertReminders({
-        messages: msgs,
-        agent,
-        session,
-      })
+      if (!solo) {
+        msgs = await insertReminders({
+          messages: msgs,
+          agent,
+          session,
+        })
+      }
 
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
@@ -743,7 +765,7 @@ export namespace SessionPrompt {
       }
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
+      if (!solo && step > 1 && lastFinished) {
         for (const msg of msgs) {
           if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
           for (const part of msg.parts) {
@@ -761,16 +783,18 @@ export namespace SessionPrompt {
         }
       }
 
-      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+      if (!solo) {
+        await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+      }
 
       // Build system prompt, adding structured output instruction if needed
       // Shadow agent doesn't need AGENTS.md instructions or skills — just its own prompt + environment
       const isShadowAgent = agent.name === "shadow"
-      const skills = isShadowAgent ? null : await SystemPrompt.skills(agent)
+      const skills = solo || isShadowAgent ? null : await SystemPrompt.skills(agent)
       const system = [
-        ...(await SystemPrompt.environment(model)),
+        ...(solo ? [] : await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
-        ...(isShadowAgent ? [] : await InstructionPrompt.system()),
+        ...(solo || isShadowAgent ? [] : await InstructionPrompt.system()),
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
@@ -813,6 +837,29 @@ export namespace SessionPrompt {
       const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
 
       if (modelFinished && !processor.message.error) {
+        if (agent.name === "independent-research" && !(await fetched(msgs, processor.message.id))) {
+          const retry: MessageV2.User = {
+            id: MessageID.ascending(),
+            sessionID,
+            role: "user",
+            time: {
+              created: Date.now(),
+            },
+            agent: lastUser.agent,
+            model: lastUser.model,
+            isolated: lastUser.isolated,
+          }
+          await Session.updateMessage(retry)
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: retry.id,
+            sessionID,
+            type: "text",
+            text: "Before you answer, you must use the webfetch tool at least once and base your research on that fetched source.",
+            synthetic: true,
+          } satisfies MessageV2.TextPart)
+          continue
+        }
         if (format.type === "json_schema") {
           // Model stopped without calling StructuredOutput tool
           processor.message.error = new MessageV2.StructuredOutputError({
@@ -883,6 +930,8 @@ export namespace SessionPrompt {
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
+    const user = input.messages.findLast((msg) => msg.info.role === "user")
+    const solo = user?.info.role === "user" && user.info.isolated === true
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -930,17 +979,19 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            {
-              args,
-            },
-          )
+          if (!solo) {
+            await Plugin.trigger(
+              "tool.execute.before",
+              {
+                tool: item.id,
+                sessionID: ctx.sessionID,
+                callID: ctx.callID,
+              },
+              {
+                args,
+              },
+            )
+          }
           const result = await item.execute(args, ctx)
           const output = {
             ...result,
@@ -951,16 +1002,18 @@ export namespace SessionPrompt {
               messageID: input.processor.message.id,
             })),
           }
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-              args,
-            },
-            output,
-          )
+          if (!solo) {
+            await Plugin.trigger(
+              "tool.execute.after",
+              {
+                tool: item.id,
+                sessionID: ctx.sessionID,
+                callID: ctx.callID,
+                args,
+              },
+              output,
+            )
+          }
           return output
         },
       })
@@ -1123,6 +1176,7 @@ export namespace SessionPrompt {
       tools: input.tools,
       agent: agent.name,
       model,
+      isolated: input.isolated,
       system: input.system,
       format: input.format,
       variant,
@@ -1445,20 +1499,22 @@ export namespace SessionPrompt {
       }),
     ).then((x) => x.flat().map(assign))
 
-    await Plugin.trigger(
-      "chat.message",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        messageID: input.messageID,
-        variant: input.variant,
-      },
-      {
-        message: info,
-        parts,
-      },
-    )
+    if (!isolated(input)) {
+      await Plugin.trigger(
+        "chat.message",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          model: input.model,
+          messageID: input.messageID,
+          variant: input.variant,
+        },
+        {
+          message: info,
+          parts,
+        },
+      )
+    }
 
     const parsedInfo = MessageV2.Info.safeParse(info)
     if (!parsedInfo.success) {

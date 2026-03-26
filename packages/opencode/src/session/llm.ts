@@ -66,6 +66,7 @@ export namespace LLM {
     ])
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+    const solo = input.user.isolated === true
 
     const system: string[] = []
     system.push(
@@ -82,11 +83,13 @@ export namespace LLM {
     )
 
     const header = system[0]
-    await Plugin.trigger(
-      "experimental.chat.system.transform",
-      { sessionID: input.sessionID, model: input.model },
-      { system },
-    )
+    if (!solo) {
+      await Plugin.trigger(
+        "experimental.chat.system.transform",
+        { sessionID: input.sessionID, model: input.model },
+        { system },
+      )
+    }
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
@@ -128,38 +131,46 @@ export namespace LLM {
             ...input.messages,
           ]
 
-    const params = await Plugin.trigger(
-      "chat.params",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-          : undefined,
-        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-        topK: ProviderTransform.topK(input.model),
-        options,
-      },
-    )
+    const chat = {
+      temperature: input.model.capabilities.temperature
+        ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+        : undefined,
+      topP: input.agent.topP ?? ProviderTransform.topP(input.model),
+      topK: ProviderTransform.topK(input.model),
+      options,
+    }
 
-    const { headers } = await Plugin.trigger(
-      "chat.headers",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        headers: {},
-      },
-    )
+    const params: typeof chat = solo
+      ? chat
+      : await Plugin.trigger(
+          "chat.params",
+          {
+            sessionID: input.sessionID,
+            agent: input.agent,
+            model: input.model,
+            provider,
+            message: input.user,
+          },
+          chat,
+        )
+
+    const headers = solo
+      ? {}
+      : (
+          await Plugin.trigger(
+            "chat.headers",
+            {
+              sessionID: input.sessionID,
+              agent: input.agent,
+              model: input.model,
+              provider,
+              message: input.user,
+            },
+            {
+              headers: {},
+            },
+          )
+        ).headers
 
     const maxOutputTokens =
       isOpenaiOauth || provider.id.includes("github-copilot")

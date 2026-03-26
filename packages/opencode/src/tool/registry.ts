@@ -11,6 +11,7 @@ import { TaskTool } from "./task"
 import { IndependentResearchTool } from "./independent-research"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
+import { GoogleTool } from "./google"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
@@ -126,6 +127,7 @@ export namespace ToolRegistry {
           WriteTool,
           TaskTool,
           IndependentResearchTool,
+          GoogleTool,
           WebFetchTool,
           TodoWriteTool,
           WebSearchTool,
@@ -162,12 +164,14 @@ export namespace ToolRegistry {
       ) {
         const state = yield* InstanceState.get(cache)
         const allTools = yield* Effect.promise(() => all(state.custom))
+        const solo = agent?.name === "independent-research"
         return yield* Effect.promise(() =>
           Promise.all(
             allTools
               .filter((tool) => {
                 // Enable websearch/codesearch for zen users OR via enable flag
                 if (tool.id === "codesearch" || tool.id === "websearch") {
+                  if (tool.id === "websearch" && agent?.name === "independent-research") return true
                   return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
                 }
 
@@ -186,7 +190,9 @@ export namespace ToolRegistry {
                   description: next.description,
                   parameters: next.parameters,
                 }
-                await Plugin.trigger("tool.definition", { toolID: tool.id }, output)
+                if (!solo) {
+                  await Plugin.trigger("tool.definition", { toolID: tool.id }, output)
+                }
                 return {
                   id: tool.id,
                   ...next,

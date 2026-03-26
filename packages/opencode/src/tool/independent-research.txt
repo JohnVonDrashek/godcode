@@ -1,11 +1,12 @@
-Launch a dedicated research subagent that only uses the `webfetch` tool.
+Launch a dedicated research subagent that uses only the `google`, `websearch`, and `webfetch` tools.
 
 Use this tool when you want external, codebase-independent research.
 
 This subagent:
+- starts from a fresh session each time
 - does not inspect the repository
 - does not use local file or shell tools
-- uses only `webfetch`
+- uses only `google`, `websearch`, and `webfetch`
 - focuses on unbiased external research, docs, and public sources
 
 Use it for:
@@ -17,3 +18,26 @@ Do not use it for:
 - searching local files
 - making code changes
 - questions that require repository inspection
+
+How to use it:
+- NEVER give it a detailed prompt
+- ALWAYS give prompts that most accurately reflect what the user has requested without injecting ANY bias.
+
+Example ask from the user:
+Find me solid self-hosted forum software
+
+Good example usage of the tool from you:
+```
+Find me solid self-hosted forum software
+```
+
+Why is it good?
+It is exactly what the user asked for
+
+Bad example usage of the tool from you:
+```
+Find open source software to use with Go, MySQL, and hosted on Kubernetes.
+```
+
+Why is it bad?
+You made assumptions that the user didn't ask for poisoning the context ruining independent research.

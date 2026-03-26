@@ -21,6 +21,7 @@ import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
 import { CodeSearchTool } from "../../tool/codesearch"
+import { GoogleTool } from "../../tool/google"
 import { WebSearchTool } from "../../tool/websearch"
 import { IndependentResearchTool } from "../../tool/independent-research"
 import { TaskTool } from "../../tool/task"
@@ -165,6 +166,13 @@ function websearch(info: ToolProps<typeof WebSearchTool>) {
   inline({
     icon: "◈",
     title: `Exa Web Search "${info.input.query}"`,
+  })
+}
+
+function google(info: ToolProps<typeof GoogleTool>) {
+  inline({
+    icon: "◎",
+    title: `Google Search "${info.input.query}"`,
   })
 }
 
@@ -441,6 +449,7 @@ export const RunCommand = cmd({
           if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
           if (part.tool === "edit") return edit(props<typeof EditTool>(part))
           if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
+          if (part.tool === "google") return google(props<typeof GoogleTool>(part))
           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
           if (part.tool === "independent-research") return research(props<typeof IndependentResearchTool>(part))

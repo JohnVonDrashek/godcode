@@ -241,12 +241,14 @@ export namespace Agent {
                 defaults,
                 Permission.fromConfig({
                   "*": "deny",
+                  google: "allow",
+                  websearch: "allow",
                   webfetch: "allow",
                 }),
                 user,
               ),
               description:
-                "External research subagent that avoids codebase inspection and uses only webfetch to gather unbiased public information.",
+                "External research subagent that avoids codebase inspection and uses google, websearch, and webfetch to gather unbiased public information.",
               prompt: PROMPT_INDEPENDENT_RESEARCH,
               options: {},
               mode: "subagent",

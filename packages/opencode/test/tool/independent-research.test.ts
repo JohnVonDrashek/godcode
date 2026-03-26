@@ -23,7 +23,7 @@ describe("tool.independent-research", () => {
     await Instance.disposeAll()
   })
 
-  test("delegates to runTask with fixed subagent type", async () => {
+  test("delegates to runTask with fixed subagent type and isolated prompt", async () => {
     const result = {
       title: "research",
       metadata: {
@@ -53,6 +53,16 @@ describe("tool.independent-research", () => {
         subagent_type: "independent-research",
       },
       ctx,
+      {
+        isolated: true,
+        resume: false,
+        parts: [
+          {
+            type: "text",
+            text: "Compare official docs",
+          },
+        ],
+      },
     )
     expect(output.output).toBe("done")
     run.mockRestore()

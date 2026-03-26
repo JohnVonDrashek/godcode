@@ -26,7 +26,15 @@ const parameters = z.object({
 
 export type TaskParams = z.infer<typeof parameters>
 
-export async function runTask(params: TaskParams, ctx: Tool.Context) {
+export async function runTask(
+  params: TaskParams,
+  ctx: Tool.Context,
+  opts?: {
+    parts?: Awaited<ReturnType<typeof SessionPrompt.resolvePromptParts>>
+    isolated?: boolean
+    resume?: boolean
+  },
+) {
   const config = await Config.get()
 
   if (!ctx.extra?.bypassAgentCheck) {
@@ -45,9 +53,10 @@ export async function runTask(params: TaskParams, ctx: Tool.Context) {
   if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
   const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+  const resume = opts?.resume !== false
 
   const session = await iife(async () => {
-    if (params.task_id) {
+    if (resume && params.task_id) {
       const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
       if (found) return found
     }
@@ -106,7 +115,7 @@ export async function runTask(params: TaskParams, ctx: Tool.Context) {
   }
   ctx.abort.addEventListener("abort", cancel)
   using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-  const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+  const promptParts = opts?.parts ?? (await SessionPrompt.resolvePromptParts(params.prompt))
 
   const result = await SessionPrompt.prompt({
     messageID,
@@ -116,6 +125,7 @@ export async function runTask(params: TaskParams, ctx: Tool.Context) {
       providerID: model.providerID,
     },
     agent: agent.name,
+    isolated: opts?.isolated,
     tools: {
       todowrite: false,
       todoread: false,
@@ -128,7 +138,7 @@ export async function runTask(params: TaskParams, ctx: Tool.Context) {
   const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
   const output = [
-    `task_id: ${session.id} (for resuming to continue this task if needed)`,
+    resume ? `task_id: ${session.id} (for resuming to continue this task if needed)` : `task_id: ${session.id}`,
     "",
     "<task_result>",
     text,

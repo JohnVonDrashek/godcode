@@ -1,0 +1,16 @@
+Search google for search results.
+
+Use this tool when you need query-based web discovery.
+
+This tool:
+- runs a web search from a text query
+- returns titles, URLs, and snippets
+- helps you discover pages before using `webfetch` to read them
+
+Use it for:
+- finding relevant docs, articles, or reference pages
+- discovering multiple candidate sources for follow-up reading
+- broad external research
+
+Do not use it for:
+- reading page contents in depth
