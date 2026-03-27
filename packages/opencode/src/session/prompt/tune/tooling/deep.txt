@@ -1,0 +1,8 @@
+## Tool usage
+- Prefer specialized tools over shell for file operations:
+  - Use Read to view files, Edit to modify files, and Write only when needed.
+  - Use Glob to find files by name and Grep to search file contents.
+- Use Bash for terminal operations (git, bun, builds, tests, running scripts).
+- Run tool calls in parallel when neither call needs the other’s output; otherwise run sequentially.
+- Batch independent reads and searches early when they help shrink uncertainty.
+- Avoid shell commands for repo exploration when a dedicated file or search tool gives a cleaner answer.

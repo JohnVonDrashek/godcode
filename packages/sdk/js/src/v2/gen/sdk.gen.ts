@@ -19,6 +19,8 @@ import type {
   Config as Config3,
   ConfigGetResponses,
   ConfigProvidersResponses,
+  ConfigTuneUpdateErrors,
+  ConfigTuneUpdateResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
   EventSubscribeResponses,
@@ -758,6 +760,52 @@ export class Pty extends HeyApiClient {
   }
 }
 
+export class Tune extends HeyApiClient {
+  /**
+   * Update project tune
+   *
+   * Update project-local tune settings in the hidden project tune file.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      agent?: string
+      tune?: {
+        order: Array<string>
+        values: {
+          [key: string]: string
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "tune" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<ConfigTuneUpdateResponses, ConfigTuneUpdateErrors, ThrowOnError>({
+      url: "/config/tune",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * Get configuration
@@ -854,6 +902,11 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _tune?: Tune
+  get tune(): Tune {
+    return (this._tune ??= new Tune({ client: this.client }))
   }
 }
 
@@ -1869,6 +1922,7 @@ export class Session2 extends HeyApiClient {
         [key: string]: boolean
       }
       format?: OutputFormat
+      prompt?: string
       system?: string
       isolated?: boolean
       variant?: string
@@ -1894,6 +1948,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
+            { in: "body", key: "prompt" },
             { in: "body", key: "system" },
             { in: "body", key: "isolated" },
             { in: "body", key: "variant" },
@@ -2008,6 +2063,7 @@ export class Session2 extends HeyApiClient {
         [key: string]: boolean
       }
       format?: OutputFormat
+      prompt?: string
       system?: string
       isolated?: boolean
       variant?: string
@@ -2033,6 +2089,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
+            { in: "body", key: "prompt" },
             { in: "body", key: "system" },
             { in: "body", key: "isolated" },
             { in: "body", key: "variant" },
@@ -2067,6 +2124,8 @@ export class Session2 extends HeyApiClient {
       messageID?: string
       agent?: string
       model?: string
+      prompt?: string
+      system?: string
       arguments?: string
       command?: string
       variant?: string
@@ -2092,6 +2151,8 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "messageID" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "system" },
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },

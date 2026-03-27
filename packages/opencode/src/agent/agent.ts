@@ -25,6 +25,7 @@ import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { Tune } from "@/util/tune"
 
 export namespace Agent {
   export const Info = z
@@ -111,7 +112,9 @@ export namespace Agent {
               name: "build",
               description: "The default agent. Executes tools based on configured permissions.",
               switch: true,
-              options: {},
+              options: {
+                tune: Tune.DEFAULT,
+              },
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({

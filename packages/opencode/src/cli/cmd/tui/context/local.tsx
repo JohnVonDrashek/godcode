@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { Tune } from "@/util/tune"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -398,6 +399,111 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const tune = iife(() => {
+      const [store, setStore] = createStore<{
+        ready: boolean
+        draft: Record<string, Tune.Info>
+        session: Record<string, Record<string, Tune.Info>>
+      }>({
+        ready: false,
+        draft: {},
+        session: {},
+      })
+
+      const file = path.join(Global.Path.state, "tune.json")
+      const state = {
+        pending: false,
+      }
+
+      function save() {
+        if (!store.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
+        Filesystem.writeJson(file, {
+          draft: store.draft,
+          session: store.session,
+        })
+      }
+
+      Filesystem.readJson(file)
+        .then((x: any) => {
+          if (x.draft && typeof x.draft === "object") {
+            const draft = Object.fromEntries(Object.entries(x.draft).map(([name, item]) => [name, Tune.from(item)]))
+            setStore("draft", draft)
+          }
+          if (x.session && typeof x.session === "object") {
+            const session = Object.fromEntries(
+              Object.entries(x.session).map(([id, value]) => [
+                id,
+                Object.fromEntries(
+                  Object.entries((value as Record<string, unknown>) ?? {}).map(([name, item]) => [
+                    name,
+                    Tune.from(item),
+                  ]),
+                ),
+              ]),
+            )
+            setStore("session", session)
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setStore("ready", true)
+          if (state.pending) save()
+        })
+
+      return {
+        get(sessionID: string | undefined, agent: string) {
+          const tune = sessionID ? store.session[sessionID]?.[agent] : store.draft[agent]
+          if (!tune) return undefined
+          return Tune.from(tune)
+        },
+        set(sessionID: string | undefined, agent: string, tune: Tune.Info) {
+          if (!sessionID) {
+            setStore("draft", agent, Tune.from(tune))
+            save()
+            return
+          }
+          setStore("session", sessionID, agent, Tune.from(tune))
+          save()
+        },
+        clear(sessionID: string | undefined, agent: string) {
+          if (!sessionID) {
+            if (!store.draft[agent]) return
+            setStore(
+              produce((draft) => {
+                delete draft.draft[agent]
+              }),
+            )
+            save()
+            return
+          }
+          if (!store.session[sessionID]?.[agent]) return
+          setStore(
+            produce((draft) => {
+              delete draft.session[sessionID][agent]
+              if (Object.keys(draft.session[sessionID]).length === 0) delete draft.session[sessionID]
+            }),
+          )
+          save()
+        },
+        promote(sessionID: string, agent: string) {
+          const tune = store.draft[agent]
+          if (!tune) return
+          setStore(
+            produce((draft) => {
+              draft.session[sessionID] ??= {}
+              draft.session[sessionID][agent] = Tune.from(tune)
+              delete draft.draft[agent]
+            }),
+          )
+          save()
+        },
+      }
+    })
+
     const mcp = {
       isEnabled(name: string) {
         const status = sync.data.mcp[name]
@@ -437,6 +543,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      tune,
     }
     return result
   },

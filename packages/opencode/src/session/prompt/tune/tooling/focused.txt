@@ -1,0 +1,4 @@
+## Tool usage
+- Prefer specialized tools over shell for file operations.
+- Use Bash for terminal operations.
+- Run tool calls in parallel when they are independent.

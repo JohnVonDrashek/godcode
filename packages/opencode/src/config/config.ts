@@ -38,6 +38,7 @@ import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Lock } from "@/util/lock"
+import { Tune } from "@/util/tune"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -150,6 +151,7 @@ export namespace Config {
           result.mode ??= {}
           result.plugin ??= []
         }
+        result = mergeConfigConcatArrays(result, await loadTune(path.join(dir, "tune.json")))
       }
 
       deps.push(
@@ -160,8 +162,9 @@ export namespace Config {
       )
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
-      result.agent = mergeDeep(result.agent, await loadMode(dir))
+      result.agent = mergeDeep(result.agent ?? {}, await loadAgent(dir))
+      result.agent = mergeDeep(result.agent ?? {}, await loadMode(dir))
+      result.plugin ??= []
       result.plugin.push(...(await loadPlugin(dir)))
     }
 
@@ -1238,12 +1241,11 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   export const global = lazy(async () => {
-    let result: Info = pipe(
-      {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "holycode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "holycode.jsonc"))),
-    )
+    let result: Info = {}
+    result = mergeDeep(result, await loadFile(path.join(Global.Path.config, "config.json")))
+    result = mergeDeep(result, await loadFile(path.join(Global.Path.config, "holycode.json")))
+    result = mergeDeep(result, await loadFile(path.join(Global.Path.config, "holycode.jsonc")))
+    result = mergeDeep(result, await loadTune(path.join(Global.Path.config, "tune.json")))
 
     const legacy = path.join(Global.Path.config, "config")
     if (existsSync(legacy)) {
@@ -1273,6 +1275,22 @@ export namespace Config {
     const text = await readFile(filepath)
     if (!text) return {}
     return load(text, { path: filepath })
+  }
+
+  async function loadTune(filepath: string): Promise<Info> {
+    log.info("loading", { path: filepath })
+    const text = await readFile(filepath)
+    if (!text) return {}
+    const data = await ConfigPaths.parseText(text, filepath)
+    if (!data || typeof data !== "object" || Array.isArray(data)) return {}
+    return {
+      agent: Object.fromEntries(
+        Object.entries(((data as any).agent ?? {}) as Record<string, unknown>).map(([name, value]) => [
+          name,
+          { options: { tune: Tune.from(value) } },
+        ]),
+      ),
+    }
   }
 
   async function load(text: string, options: { path: string } | { dir: string; source: string }) {
@@ -1353,6 +1371,38 @@ export namespace Config {
     const existing = await loadFile(filepath)
     await Filesystem.writeJson(filepath, mergeDeep(existing, config))
     await Instance.dispose()
+  }
+
+  async function ensureTuneGitIgnore(dir: string) {
+    const file = path.join(dir, ".gitignore")
+    const text = await Filesystem.readText(file).catch(() => "")
+    const lines = text.split("\n").filter(Boolean)
+    if (lines.includes("tune.json")) return
+    lines.push("tune.json")
+    await Filesystem.write(file, lines.join("\n") + "\n")
+  }
+
+  export async function updateProjectTune(input: { agent: string; tune: unknown }) {
+    const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+    const dir = path.join(root, ".holycode")
+    const file = path.join(dir, "tune.json")
+    await fs.mkdir(dir, { recursive: true })
+    await ensureTuneGitIgnore(dir)
+    const text = await Filesystem.readText(file).catch((err: any) => {
+      if (err.code === "ENOENT") return "{}"
+      throw err
+    })
+    const data = await ConfigPaths.parseText(text, file, "empty")
+    const next = {
+      ...(data && typeof data === "object" && !Array.isArray(data) ? data : {}),
+      agent: {
+        ...((((data as any) ?? {}).agent ?? {}) as Record<string, unknown>),
+        [input.agent]: Tune.from(input.tune),
+      },
+    }
+    await Filesystem.writeJson(file, next)
+    await Instance.dispose()
+    return next
   }
 
   function globalConfigFile() {

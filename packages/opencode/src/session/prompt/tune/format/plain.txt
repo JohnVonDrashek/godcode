@@ -1,0 +1,5 @@
+## Final answer structure and style guidelines
+
+- Use plain text with light structure only when it helps scanning.
+- Prefer short bullet lists and inline file references.
+- Match the amount of explanation to the complexity of the task.

@@ -367,6 +367,7 @@ export namespace MessageV2 {
       modelID: ModelID.zod,
     }),
     isolated: z.boolean().optional(),
+    prompt: z.string().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),

@@ -134,6 +134,7 @@ export type UserMessage = {
     modelID: string
   }
   isolated?: boolean
+  prompt?: string
   system?: string
   tools?: {
     [key: string]: boolean
@@ -2502,6 +2503,42 @@ export type ConfigUpdateResponses = {
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
 
+export type ConfigTuneUpdateData = {
+  body?: {
+    agent: string
+    tune: {
+      order: Array<string>
+      values: {
+        [key: string]: string
+      }
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/tune"
+}
+
+export type ConfigTuneUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigTuneUpdateError = ConfigTuneUpdateErrors[keyof ConfigTuneUpdateErrors]
+
+export type ConfigTuneUpdateResponses = {
+  /**
+   * Successfully updated project tune
+   */
+  200: boolean
+}
+
+export type ConfigTuneUpdateResponse = ConfigTuneUpdateResponses[keyof ConfigTuneUpdateResponses]
+
 export type ConfigProvidersData = {
   body?: never
   path?: never
@@ -3399,6 +3436,7 @@ export type SessionPromptData = {
       [key: string]: boolean
     }
     format?: OutputFormat
+    prompt?: string
     system?: string
     isolated?: boolean
     variant?: string
@@ -3604,6 +3642,7 @@ export type SessionPromptAsyncData = {
       [key: string]: boolean
     }
     format?: OutputFormat
+    prompt?: string
     system?: string
     isolated?: boolean
     variant?: string
@@ -3650,6 +3689,8 @@ export type SessionCommandData = {
     messageID?: string
     agent?: string
     model?: string
+    prompt?: string
+    system?: string
     arguments: string
     command: string
     variant?: string

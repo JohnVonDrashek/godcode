@@ -71,8 +71,7 @@ export namespace LLM {
     const system: string[] = []
     system.push(
       [
-        // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        ...SystemPrompt.prompt(input.model, input.agent, input.user.prompt),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message

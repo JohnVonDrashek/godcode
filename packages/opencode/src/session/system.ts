@@ -13,6 +13,7 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { Tune } from "@/util/tune"
 
 export namespace SystemPrompt {
   export function provider(model: Provider.Model) {
@@ -23,6 +24,13 @@ export namespace SystemPrompt {
     if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
     if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
     return [PROMPT_DEFAULT]
+  }
+
+  export function prompt(model: Provider.Model, agent: Agent.Info, override?: string) {
+    if (override) return [override]
+    if (agent.name === "build" && agent.options?.tune) return [Tune.prompt(Tune.from(agent.options.tune))]
+    if (agent.prompt) return [agent.prompt]
+    return provider(model)
   }
 
   export async function environment(model: Provider.Model) {

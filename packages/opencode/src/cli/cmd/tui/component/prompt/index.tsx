@@ -57,6 +57,8 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { Tune } from "@/util/tune"
+import { DialogTune } from "../dialog-tune"
 
 export type PromptProps = {
   sessionID?: string
@@ -421,6 +423,18 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Tune agent",
+        value: "prompt.tune",
+        category: "Prompt",
+        slash: {
+          name: "tune",
+        },
+        enabled: local.agent.current().name === "build",
+        onSelect: (dialog) => {
+          dialog.replace(() => <DialogTune sessionID={props.sessionID} />)
+        },
+      },
+      {
         title: "Skills",
         value: "prompt.skills",
         category: "Prompt",
@@ -643,6 +657,7 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+      local.tune.promote(sessionID, local.agent.current().name)
     }
 
     const messageID = MessageID.ascending()
@@ -705,13 +720,14 @@ export function Prompt(props: PromptProps) {
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
+        prompt: tunePrompt(),
         parts: nonTextParts
           .filter((x) => x.type === "file")
           .map((x) => ({
             id: PartID.ascending(),
             ...x,
           })),
-      })
+      } as any)
     } else {
       const shadowModelSelection = local.agent.current().name === "shadow" ? local.model.shadow.current() : undefined
       sdk.client.session
@@ -722,6 +738,7 @@ export function Prompt(props: PromptProps) {
           agent: local.agent.current().name,
           model: selectedModel,
           variant,
+          prompt: tunePrompt(),
           // shadowModel is not yet in generated SDK types
           ...(shadowModelSelection ? ({ shadowModel: shadowModelSelection } as any) : {}),
           parts: [
@@ -947,6 +964,26 @@ export function Prompt(props: PromptProps) {
         minAlpha: 0.3,
       }),
     }
+  })
+
+  const tuneInfo = createMemo(() => {
+    if (store.mode !== "normal") return undefined
+    if (local.agent.current().name !== "build") return undefined
+    const saved = Tune.from(local.agent.current().options?.tune)
+    const live = local.tune.get(props.sessionID, local.agent.current().name)
+    return Tune.from(live ?? saved)
+  })
+
+  const tunePrompt = createMemo(() => {
+    const info = tuneInfo()
+    if (!info) return undefined
+    return Tune.prompt(info)
+  })
+
+  const tuneActive = createMemo(() => {
+    const info = tuneInfo()
+    if (!info) return false
+    return Tune.active(info)
   })
 
   return (
@@ -1218,6 +1255,10 @@ export function Prompt(props: PromptProps) {
                   <Show when={local.agent.current().name === "shadow" && local.model.shadow.parsed()}>
                     <text fg={theme.textMuted}>·</text>
                     <text fg={theme.textMuted}>shadow: {local.model.shadow.parsed()!.model}</text>
+                  </Show>
+                  <Show when={tuneActive()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>tuned</text>
                   </Show>
                 </box>
               </Show>

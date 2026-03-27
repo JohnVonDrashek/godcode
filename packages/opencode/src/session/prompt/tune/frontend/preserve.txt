@@ -1,0 +1,4 @@
+## Frontend tasks
+- When doing frontend work, aim for deliberate visual design rather than generic boilerplate.
+- Preserve the established patterns, structure, and visual language when the repository already has a design system.
+- Ensure the page works on desktop and mobile.

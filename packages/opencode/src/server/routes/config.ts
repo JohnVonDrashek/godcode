@@ -10,6 +10,14 @@ import { lazy } from "../../util/lazy"
 
 const log = Log.create({ service: "server" })
 
+const TuneUpdate = z.object({
+  agent: z.string(),
+  tune: z.object({
+    order: z.array(z.string()),
+    values: z.record(z.string(), z.string()),
+  }),
+})
+
 export const ConfigRoutes = lazy(() =>
   new Hono()
     .get(
@@ -56,6 +64,31 @@ export const ConfigRoutes = lazy(() =>
         const config = c.req.valid("json")
         await Config.update(config)
         return c.json(config)
+      },
+    )
+    .patch(
+      "/tune",
+      describeRoute({
+        summary: "Update project tune",
+        description: "Update project-local tune settings in the hidden project tune file.",
+        operationId: "config.tune.update",
+        responses: {
+          200: {
+            description: "Successfully updated project tune",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", TuneUpdate),
+      async (c) => {
+        const input = c.req.valid("json")
+        await Config.updateProjectTune(input)
+        return c.json(true)
       },
     )
     .get(

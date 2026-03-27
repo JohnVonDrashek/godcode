@@ -11,6 +11,7 @@ import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { BunProc } from "../../src/bun"
+import { Tune } from "../../src/util/tune"
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -687,6 +688,96 @@ test("updates config and writes to file", async () => {
 
       const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
       expect(writtenConfig.model).toBe("updated/model")
+    },
+  })
+})
+
+test("loads project tune from .holycode/tune.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await fs.mkdir(path.join(dir, ".holycode"), { recursive: true })
+      await Filesystem.writeJson(path.join(dir, ".holycode", "tune.json"), {
+        agent: {
+          build: {
+            order: ["base", "presenting", "editing", "tooling", "git", "frontend", "format"],
+            values: {
+              base: "lean",
+              presenting: "terse",
+              editing: "strict",
+              tooling: "focused",
+              git: "permissive",
+              frontend: "preserve",
+              format: "plain",
+            },
+          },
+        },
+      })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.build?.options?.tune).toEqual(
+        Tune.from({
+          order: ["base", "presenting", "editing", "tooling", "git", "frontend", "format"],
+          values: {
+            base: "lean",
+            presenting: "terse",
+            editing: "strict",
+            tooling: "focused",
+            git: "permissive",
+            frontend: "preserve",
+            format: "plain",
+          },
+        }),
+      )
+    },
+  })
+})
+
+test("writes project tune to hidden tune file", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Config.updateProjectTune({
+        agent: "build",
+        tune: Tune.from({
+          order: ["base", "git", "presenting", "editing", "tooling", "frontend", "format"],
+          values: {
+            base: "agentic",
+            git: "cautious",
+            presenting: "teaching",
+            editing: "refactor",
+            tooling: "deep",
+            frontend: "art-direct",
+            format: "structured",
+          },
+        }),
+      })
+
+      expect(await Filesystem.readJson<Record<string, unknown>>(path.join(tmp.path, ".holycode", "tune.json"))).toEqual(
+        {
+          agent: {
+            build: {
+              order: ["base", "git", "presenting", "editing", "tooling", "frontend", "format"],
+              values: {
+                base: "agentic",
+                git: "cautious",
+                presenting: "teaching",
+                editing: "refactor",
+                tooling: "deep",
+                frontend: "art-direct",
+                format: "structured",
+              },
+            },
+          },
+        },
+      )
+      expect(await Filesystem.readText(path.join(tmp.path, ".holycode", ".gitignore"))).toContain("tune.json")
+      expect(await Filesystem.exists(path.join(tmp.path, "config.json"))).toBe(false)
     },
   })
 })

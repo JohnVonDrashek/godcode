@@ -1,0 +1,5 @@
+## Git and workspace hygiene
+- Do not revert unrelated user changes.
+- Do not amend commits unless explicitly requested.
+- Avoid destructive git commands unless explicitly requested.
+- When routine git work is clearly requested, do it directly without extra cautionary narration.
