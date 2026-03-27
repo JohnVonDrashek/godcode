@@ -41,7 +41,7 @@ describe("tool.switch", () => {
         const root = path.join(dir, ".holycode", "agent")
         await fs.mkdir(root, { recursive: true })
         await Bun.write(
-          path.join(root, "holybuild.md"),
+          path.join(root, "custom-build.md"),
           [
             "---",
             "description: Custom builder",
@@ -75,15 +75,15 @@ describe("tool.switch", () => {
         ask.mockResolvedValueOnce([["Yes"]])
 
         const tool = await AgentSwitchTool.init()
-        const result = await tool.execute({ agent: "holybuild" }, ctx(session.id))
+        const result = await tool.execute({ agent: "custom-build" }, ctx(session.id))
 
-        expect(result.metadata.agent).toBe("holybuild")
+        expect(result.metadata.agent).toBe("custom-build")
 
         const msgs = await Session.messages({ sessionID: session.id })
-        const msg = msgs.findLast((item) => item.info.role === "user" && item.info.agent === "holybuild")
+        const msg = msgs.findLast((item) => item.info.role === "user" && item.info.agent === "custom-build")
 
         expect(msg).toBeDefined()
-        expect(msg?.parts.some((part) => part.type === "text" && part.text.includes("holybuild agent"))).toBe(true)
+        expect(msg?.parts.some((part) => part.type === "text" && part.text.includes("custom-build agent"))).toBe(true)
       },
     })
   })
@@ -94,7 +94,7 @@ describe("tool.switch", () => {
         const root = path.join(dir, ".holycode", "agent")
         await fs.mkdir(root, { recursive: true })
         await Bun.write(
-          path.join(root, "holybuild.md"),
+          path.join(root, "custom-build.md"),
           [
             "---",
             "description: Custom builder",
@@ -113,8 +113,8 @@ describe("tool.switch", () => {
         const session = await Session.create({})
         const tool = await AgentSwitchTool.init()
 
-        await expect(tool.execute({ agent: "holybuild" }, ctx(session.id))).rejects.toThrow(
-          'Agent "holybuild" is not a switchable primary agent.',
+        await expect(tool.execute({ agent: "custom-build" }, ctx(session.id))).rejects.toThrow(
+          'Agent "custom-build" is not a switchable primary agent.',
         )
         expect(ask).not.toHaveBeenCalled()
       },
