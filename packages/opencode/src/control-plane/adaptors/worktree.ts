@@ -2,8 +2,6 @@ import { Hono } from "hono"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { SessionRoutes } from "@/server/routes/session"
-import { WorkspaceContext } from "../workspace-context"
-import { WorkspaceID } from "../schema"
 import z from "zod"
 import { Worktree } from "@/worktree"
 import { type Adaptor, WorkspaceInfo } from "../types"
@@ -44,16 +42,11 @@ export const WorktreeAdaptor: Adaptor = {
   async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
     const config = Config.parse(info)
     const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
-    return WorkspaceContext.provide({
-      workspaceID: WorkspaceID.make(config.id),
+    return Instance.provide({
+      directory: config.directory,
+      init: InstanceBootstrap,
       async fn() {
-        return Instance.provide({
-          directory: config.directory,
-          init: InstanceBootstrap,
-          async fn() {
-            return app.fetch(new Request(url, init))
-          },
-        })
+        return app.fetch(new Request(url, init))
       },
     })
   },

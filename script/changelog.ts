@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk/v2"
 import { parseArgs } from "util"
 import { Script } from "@opencode-ai/script"
+import { createOpencode } from "./opencode"
 
 type Release = {
   tag_name: string
@@ -220,7 +220,7 @@ export async function buildNotes(from: string, to: string) {
 
   console.log("generating changelog since " + from)
 
-  const opencode = await createOpencode({ port: 0 })
+  const opencode = createOpencode()
   const notes: string[] = []
 
   try {

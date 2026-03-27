@@ -14,10 +14,7 @@ import { Skill } from "../skill"
 import { Auth } from "../auth"
 import { Command } from "../command"
 import { Global } from "../global"
-import { WorkspaceContext } from "../control-plane/workspace-context"
-import { WorkspaceID } from "../control-plane/schema"
 import { ProviderID } from "../provider/schema"
-import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
@@ -150,7 +147,6 @@ export namespace Server {
       )
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
-        const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
         const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         const directory = Filesystem.resolve(
           (() => {
@@ -162,26 +158,19 @@ export namespace Server {
           })(),
         )
 
-        return WorkspaceContext.provide({
-          workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
+        return Instance.provide({
+          directory,
+          init: InstanceBootstrap,
           async fn() {
-            return Instance.provide({
-              directory,
-              init: InstanceBootstrap,
-              async fn() {
-                return next()
-              },
-            })
+            return next()
           },
         })
       })
-      .use(WorkspaceRouterMiddleware)
       .use(
         validator(
           "query",
           z.object({
             directory: z.string().optional(),
-            workspace: z.string().optional(),
           }),
         ),
       )

@@ -2,8 +2,8 @@
 
 import path from "path"
 import { pathToFileURL } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
 import { parseArgs } from "util"
+import { createOpencode } from "./opencode"
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -35,7 +35,7 @@ Examples:
     process.exit(1)
   }
 
-  const opencode = await createOpencode({ port: 0 })
+  const opencode = createOpencode()
 
   try {
     const parts: Array<{ type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }> =

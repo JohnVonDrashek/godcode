@@ -62,7 +62,6 @@ import { DialogTune } from "../dialog-tune"
 
 export type PromptProps = {
   sessionID?: string
-  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -641,9 +640,7 @@ export function Prompt(props: PromptProps) {
 
     let sessionID = props.sessionID
     if (sessionID == null) {
-      const res = await sdk.client.session.create({
-        workspaceID: props.workspaceID,
-      })
+      const res = await sdk.client.session.create({})
 
       if (res.error) {
         console.log("Creating a session failed:", res.error)
