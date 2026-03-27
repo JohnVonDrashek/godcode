@@ -1,3 +1,8 @@
+---
+name: Preserve
+description: Focuses on matching the existing design system and only keeps a light reminder to avoid generic-looking UI.
+---
+
 ## Frontend tasks
 - When doing frontend work, aim for deliberate visual design rather than generic boilerplate.
 - Preserve the established patterns, structure, and visual language when the repository already has a design system.

@@ -1,0 +1,44 @@
+---
+order:
+  - base
+  - editing
+  - tooling
+  - git
+  - frontend
+  - presenting
+  - format
+  - personality
+sections:
+  base:
+    name: Base
+    description: Sets the agent's role and top-level operating stance
+    default: default
+  editing:
+    name: Editing
+    description: Controls how conservative code edits should be
+    default: default
+  tooling:
+    name: Tooling
+    description: Controls search depth and tool selection style
+    default: default
+  git:
+    name: Git
+    description: Controls how cautious the agent is with git state
+    default: default
+  frontend:
+    name: Frontend
+    description: Controls how much visual direction to apply in UI work
+    default: default
+  presenting:
+    name: Presenting
+    description: Controls explanation style and how much rationale to include
+    default: default
+  format:
+    name: Format
+    description: Controls how structured the final response should feel
+    default: default
+  personality:
+    name: Personality
+    description: Controls its personality.
+    default: default
+---

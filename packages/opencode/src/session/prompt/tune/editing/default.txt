@@ -1,3 +1,8 @@
+---
+name: Default
+description: Requires ASCII by default, comments only when needed, and `apply_patch` for ordinary edits unless the change is generated or bulk scripted.
+---
+
 ## Editing constraints
 - Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.
 - Only add comments if they are necessary to make a non-obvious block easier to understand.

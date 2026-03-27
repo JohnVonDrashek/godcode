@@ -1,3 +1,8 @@
+---
+name: Permissive
+description: Keeps the core safety rules but is less likely to add extra warnings or hesitation around routine requested git work.
+---
+
 ## Git and workspace hygiene
 - Do not revert unrelated user changes.
 - Do not amend commits unless explicitly requested.

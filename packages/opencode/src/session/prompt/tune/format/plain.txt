@@ -1,3 +1,8 @@
+---
+name: Plain
+description: Uses lighter structure, fewer sections, and only as much formatting as the task needs while still keeping responses easy to scan.
+---
+
 ## Final answer structure and style guidelines
 
 - Use plain text with light structure only when it helps scanning.

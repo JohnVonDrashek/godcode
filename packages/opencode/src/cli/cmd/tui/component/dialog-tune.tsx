@@ -182,9 +182,14 @@ export function DialogTune(props: { sessionID?: string }) {
       cycle(-1)
       return
     }
-    if (evt.name === "right" || evt.name === "l" || evt.name === "return" || evt.name === "space") {
+    if (evt.name === "right" || evt.name === "l" || evt.name === "space") {
       evt.preventDefault()
       cycle(1)
+      return
+    }
+    if (evt.name === "return") {
+      evt.preventDefault()
+      dialog.clear()
       return
     }
     if (evt.name === "r") {

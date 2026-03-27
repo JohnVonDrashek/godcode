@@ -1,3 +1,8 @@
+---
+name: Art Direct
+description: Pushes harder on hierarchy, spacing, interaction states, and one strong visual idea so the UI feels more intentionally art-directed.
+---
+
 ## Frontend tasks
 When doing frontend design tasks, avoid collapsing into bland, generic layouts.
 Aim for interfaces that feel intentional and deliberate.

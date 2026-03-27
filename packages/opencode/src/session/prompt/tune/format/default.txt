@@ -1,3 +1,8 @@
+---
+name: Default
+description: Applies the house style for bullets, code fences, concise tone, and clickable file references without forcing extra structure.
+---
+
 ## Final answer structure and style guidelines
 
 - Plain text; CLI handles styling. Use structure only when it helps scannability.

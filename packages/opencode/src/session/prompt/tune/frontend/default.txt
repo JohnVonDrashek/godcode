@@ -1,3 +1,8 @@
+---
+name: Default
+description: Pushes against bland layouts with typography, color, motion, and background guidance while still preserving an existing design system when present.
+---
+
 ## Frontend tasks
 When doing frontend design tasks, avoid collapsing into bland, generic layouts.
 Aim for interfaces that feel intentional and deliberate.

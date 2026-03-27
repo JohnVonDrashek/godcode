@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Tune } from "../../src/util/tune"
 import codex from "../../src/session/prompt/codex.txt"
+import path from "path"
+import fs from "fs/promises"
+import { tmpdir } from "../fixture/fixture"
 
 describe("tune", () => {
   test("default tune matches codex", () => {
@@ -62,5 +65,96 @@ describe("tune", () => {
     expect(tune.values.frontend).toBe("preserve")
     expect(tune.values.presenting).toBe("terse")
     expect(tune.values.format).toBe("structured")
+  })
+
+  test("autoloads custom folders and txt metadata", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const root = path.join(dir, "tune")
+        await fs.mkdir(path.join(root, "base"), { recursive: true })
+        await fs.mkdir(path.join(root, "voice"), { recursive: true })
+        await fs.writeFile(
+          path.join(root, "options.txt"),
+          `---
+order:
+  - voice
+  - base
+sections:
+  voice:
+    name: Voice
+    description: Controls the narration style
+    default: dry
+  base:
+    name: Base
+    description: Base role
+    default: default
+---
+`,
+        )
+        await fs.writeFile(
+          path.join(root, "base", "default.txt"),
+          `---
+name: Default
+description: Base default role
+---
+
+You are HolyCode.
+`,
+        )
+        await fs.writeFile(
+          path.join(root, "voice", "dry.txt"),
+          `---
+name: Dry
+description: Keep the voice plain and minimal.
+---
+
+Keep the tone dry.
+`,
+        )
+        await fs.writeFile(
+          path.join(root, "voice", "warm.txt"),
+          `---
+name: Warm
+description: Keep the voice warmer and more conversational.
+---
+
+Keep the tone warm.
+`,
+        )
+        return root
+      },
+    })
+
+    const prev = process.env.OPENCODE_TUNE_DIR
+    process.env.OPENCODE_TUNE_DIR = tmp.extra
+    Tune.reload()
+
+    try {
+      expect(Tune.list()).toEqual(["voice", "base"])
+      expect(Tune.meta("voice")).toEqual({
+        title: "Voice",
+        help: "Controls the narration style",
+        values: {
+          dry: {
+            label: "Dry",
+            hint: "Keep the voice plain and minimal.",
+            path: path.join(tmp.extra, "voice", "dry.txt"),
+            prompt: "Keep the tone dry.",
+          },
+          warm: {
+            label: "Warm",
+            hint: "Keep the voice warmer and more conversational.",
+            path: path.join(tmp.extra, "voice", "warm.txt"),
+            prompt: "Keep the tone warm.",
+          },
+        },
+      })
+      expect(Tune.DEFAULT.values.voice).toBe("dry")
+      expect(Tune.prompt(Tune.DEFAULT)).toContain("Keep the tone dry.")
+    } finally {
+      if (prev === undefined) delete process.env.OPENCODE_TUNE_DIR
+      else process.env.OPENCODE_TUNE_DIR = prev
+      Tune.reload()
+    }
   })
 })

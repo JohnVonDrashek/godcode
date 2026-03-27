@@ -1,3 +1,8 @@
+---
+name: Deep
+description: Pushes the agent to gather more surrounding context up front, batch useful reads, and prefer dedicated repo tools over shell exploration.
+---
+
 ## Tool usage
 - Prefer specialized tools over shell for file operations:
   - Use Read to view files, Edit to modify files, and Write only when needed.

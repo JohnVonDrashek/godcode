@@ -1,3 +1,8 @@
+---
+name: Default
+description: Prefers Read/Edit/Glob/Grep for file work, Bash for terminal work, and parallel calls when tasks are independent.
+---
+
 ## Tool usage
 - Prefer specialized tools over shell for file operations:
   - Use Read to view files, Edit to modify files, and Write only when needed.

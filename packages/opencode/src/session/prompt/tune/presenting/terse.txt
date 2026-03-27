@@ -1,3 +1,8 @@
+---
+name: Terse
+description: Keeps explanations short, avoids extra wrap-up, and focuses on the action taken plus only the most necessary code-change note.
+---
+
 ## Presenting your work and final message
 
 - Be concise, direct, and collaborative.

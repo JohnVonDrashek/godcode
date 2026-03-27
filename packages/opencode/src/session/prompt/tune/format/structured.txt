@@ -1,3 +1,8 @@
+---
+name: Structured
+description: Pushes harder on grouping related points, avoiding long bullet walls, and keeping file references close to the explanation they support.
+---
+
 ## Final answer structure and style guidelines
 
 - Plain text; CLI handles styling. Use structure only when it helps scannability.

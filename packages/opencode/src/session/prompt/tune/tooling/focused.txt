@@ -1,3 +1,8 @@
+---
+name: Focused
+description: Cuts down exploratory reads and broad searches so the agent moves faster once the likely path is clear.
+---
+
 ## Tool usage
 - Prefer specialized tools over shell for file operations.
 - Use Bash for terminal operations.
