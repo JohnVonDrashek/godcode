@@ -1,0 +1,89 @@
+name: publish-github-packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish"
+        required: true
+        type: string
+      channel:
+        description: "npm dist-tag"
+        required: true
+        default: latest
+        type: choice
+        options:
+          - latest
+          - beta
+          - dev
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    if: github.repository == 'crusadesoft/holycode'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@crusadesoft"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build SDK
+        run: ./packages/sdk/js/script/build.ts
+        env:
+          OPENCODE_CHANNEL: ${{ inputs.channel }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+
+      - name: Build CLI
+        run: ./packages/opencode/script/build.ts
+        env:
+          OPENCODE_CHANNEL: ${{ inputs.channel }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_PACKAGE: "@crusadesoft/holycode"
+          OPENCODE_PLUGIN_PACKAGE: "@crusadesoft/plugin"
+
+      - name: Publish SDK
+        run: ./packages/sdk/js/script/publish.ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: false
+          OPENCODE_CHANNEL: ${{ inputs.channel }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_PUBLISH_PACKAGE: "@crusadesoft/sdk"
+          OPENCODE_PUBLISH_REGISTRY: "https://npm.pkg.github.com"
+          OPENCODE_PUBLISH_REPO: "https://github.com/${{ github.repository }}"
+
+      - name: Publish plugin
+        run: ./packages/plugin/script/publish.ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: false
+          OPENCODE_CHANNEL: ${{ inputs.channel }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_PUBLISH_PACKAGE: "@crusadesoft/plugin"
+          OPENCODE_PUBLISH_REGISTRY: "https://npm.pkg.github.com"
+          OPENCODE_PUBLISH_REPO: "https://github.com/${{ github.repository }}"
+          OPENCODE_PUBLISH_SDK_PACKAGE: "@crusadesoft/sdk"
+
+      - name: Publish CLI
+        run: ./packages/opencode/script/publish.ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: false
+          OPENCODE_CHANNEL: ${{ inputs.channel }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_PUBLISH_NPM_ONLY: "1"
+          OPENCODE_PUBLISH_PACKAGE: "@crusadesoft/holycode"
+          OPENCODE_PUBLISH_REGISTRY: "https://npm.pkg.github.com"
+          OPENCODE_PUBLISH_REPO: "https://github.com/${{ github.repository }}"

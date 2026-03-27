@@ -195,6 +195,8 @@ for (const item of targets) {
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
+      OPENCODE_PACKAGE: JSON.stringify(process.env.OPENCODE_PACKAGE || "opencode-ai"),
+      OPENCODE_PLUGIN_PACKAGE: JSON.stringify(process.env.OPENCODE_PLUGIN_PACKAGE || "@opencode-ai/plugin"),
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })

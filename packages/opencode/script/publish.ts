@@ -7,13 +7,50 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+const target = process.env.OPENCODE_PUBLISH_PACKAGE
+const reg = process.env.OPENCODE_PUBLISH_REGISTRY
+const repo = process.env.OPENCODE_PUBLISH_REPO ?? "https://github.com/anomalyco/opencode"
+const npmOnly = process.env.OPENCODE_PUBLISH_NPM_ONLY === "1"
+
+function split(name: string) {
+  if (!name.startsWith("@")) return { scope: "", base: name }
+  const idx = name.indexOf("/")
+  if (idx === -1) return { scope: "", base: name }
+  return {
+    scope: name.slice(0, idx),
+    base: name.slice(idx + 1),
+  }
+}
+
+function scoped(name: string) {
+  if (!target?.startsWith("@")) return name
+  return `${split(target).scope}/${split(name).base}`
+}
+
 const binaries: Record<string, string> = {}
+const dirs: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
   const pkg = await Bun.file(`./dist/${filepath}`).json()
-  binaries[pkg.name] = pkg.version
+  const name = scoped(pkg.name)
+  binaries[name] = pkg.version
+  dirs[name] = pkg.name
+
+  await Bun.file(`./dist/${pkg.name}/package.json`).write(
+    JSON.stringify(
+      {
+        ...pkg,
+        name,
+        ...(reg ? { publishConfig: { registry: reg } } : {}),
+        repository: { type: "git", url: repo },
+      },
+      null,
+      2,
+    ),
+  )
 }
 console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
+const name = target ?? pkg.name + "-ai"
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
@@ -23,7 +60,7 @@ await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -33,6 +70,8 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
       version: version,
       license: pkg.license,
       optionalDependencies: binaries,
+      repository: { type: "git", url: repo },
+      ...(reg ? { publishConfig: { registry: reg } } : {}),
     },
     null,
     2,
@@ -40,14 +79,18 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
+  const dir = dirs[name]
+  if (!dir) return
   if (process.platform !== "win32") {
-    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
+    await $`chmod -R 755 .`.cwd(`./dist/${dir}`)
   }
-  await $`bun pm pack`.cwd(`./dist/${name}`)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
+  await $`bun pm pack`.cwd(`./dist/${dir}`)
+  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${dir}`)
 })
 await Promise.all(tasks)
 await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
+
+if (npmOnly) process.exit(0)
 
 const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"

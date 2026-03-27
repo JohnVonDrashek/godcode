@@ -14,6 +14,8 @@ import { Log } from "../util/log"
 declare global {
   const OPENCODE_VERSION: string
   const OPENCODE_CHANNEL: string
+  const OPENCODE_PACKAGE: string
+  const OPENCODE_PLUGIN_PACKAGE: string
 }
 
 import semver from "semver"
@@ -63,6 +65,9 @@ export namespace Installation {
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
   export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+  export const PACKAGE = typeof OPENCODE_PACKAGE === "string" ? OPENCODE_PACKAGE : "opencode-ai"
+  export const PLUGIN_PACKAGE =
+    typeof OPENCODE_PLUGIN_PACKAGE === "string" ? OPENCODE_PLUGIN_PACKAGE : "@opencode-ai/plugin"
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
   export function isPreview() {
@@ -149,6 +154,15 @@ export namespace Installation {
           return "opencode"
         })
 
+        const getRegistry = Effect.fnUntraced(function* (pkg: string) {
+          const scope = pkg.startsWith("@") ? pkg.split("/")[0] : ""
+          const scoped = scope ? (yield* text(["npm", "config", "get", `${scope}:registry`])).trim() : ""
+          if (scoped && scoped !== "undefined") return scoped.endsWith("/") ? scoped.slice(0, -1) : scoped
+
+          const root = (yield* text(["npm", "config", "get", "registry"])).trim() || "https://registry.npmjs.org"
+          return root.endsWith("/") ? root.slice(0, -1) : root
+        })
+
         const upgradeCurl = Effect.fnUntraced(
           function* (target: string) {
             const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
@@ -197,7 +211,7 @@ export namespace Installation {
           for (const check of checks) {
             const output = yield* check.command()
             const installedName =
-              check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+              check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : PACKAGE
             if (output.includes(installedName)) {
               return check.name
             }
@@ -226,12 +240,12 @@ export namespace Installation {
           }
 
           if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
-            const r = (yield* text(["npm", "config", "get", "registry"])).trim()
-            const reg = r || "https://registry.npmjs.org"
-            const registry = reg.endsWith("/") ? reg.slice(0, -1) : reg
+            const registry = yield* getRegistry(PACKAGE)
             const channel = CHANNEL
             const response = yield* httpOk.execute(
-              HttpClientRequest.get(`${registry}/opencode-ai/${channel}`).pipe(HttpClientRequest.acceptJson),
+              HttpClientRequest.get(`${registry}/${encodeURIComponent(PACKAGE)}/${channel}`).pipe(
+                HttpClientRequest.acceptJson,
+              ),
             )
             const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
             return data.version
@@ -273,13 +287,13 @@ export namespace Installation {
               result = yield* upgradeCurl(target)
               break
             case "npm":
-              result = yield* run(["npm", "install", "-g", `opencode-ai@${target}`])
+              result = yield* run(["npm", "install", "-g", `${PACKAGE}@${target}`])
               break
             case "pnpm":
-              result = yield* run(["pnpm", "install", "-g", `opencode-ai@${target}`])
+              result = yield* run(["pnpm", "install", "-g", `${PACKAGE}@${target}`])
               break
             case "bun":
-              result = yield* run(["bun", "install", "-g", `opencode-ai@${target}`])
+              result = yield* run(["bun", "install", "-g", `${PACKAGE}@${target}`])
               break
             case "brew": {
               const formula = yield* getBrewFormula()
