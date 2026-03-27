@@ -42,4 +42,4 @@ export default {
       }),
     }
   },
-}
+} satisfies Agent.Source

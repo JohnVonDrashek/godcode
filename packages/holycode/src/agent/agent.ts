@@ -14,11 +14,13 @@ import PROMPT_SHADOW from "../session/prompt/shadow.txt"
 import PROMPT_SHADOW_MAIN from "../session/prompt/shadow-main.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PLAN from "@/dot-holycode/agents/plan"
+import ARCHITECT from "@/dot-holycode/agents/architect"
+import REFACTOR from "@/dot-holycode/agents/refactor"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
-import fs from "fs"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
@@ -144,16 +146,6 @@ export namespace Agent {
     return ext.length ? file.slice(0, -ext.length) : file
   }
 
-  function root() {
-    const env = process.env.HOLYCODE_DOT_HOLYCODE_PATH
-    if (env && fs.existsSync(env)) return env
-
-    const dir = path.join(path.dirname(process.execPath), "dot-holycode")
-    if (fs.existsSync(dir)) return dir
-
-    return path.join(import.meta.dir, "..", "dot-holycode")
-  }
-
   function split(input: Source) {
     const { patch, enter, leave, ...info } = input
     return {
@@ -165,10 +157,14 @@ export namespace Agent {
   }
 
   async function loadDefs() {
-    const result: Record<string, Def> = {}
+    const result: Record<string, Def> = {
+      [PLAN.name ?? "plan"]: split(PLAN),
+      [ARCHITECT.name ?? "architect"]: split(ARCHITECT),
+      [REFACTOR.name ?? "refactor"]: split(REFACTOR),
+    }
     await Config.waitForDependencies()
 
-    for (const dir of [root(), ...(await Config.directories())]) {
+    for (const dir of await Config.directories()) {
       for (const item of await Glob.scan("{agent,agents}/**/*.{ts,js}", {
         cwd: dir,
         absolute: true,

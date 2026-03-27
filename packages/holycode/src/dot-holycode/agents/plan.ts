@@ -5,6 +5,7 @@ import { Filesystem } from "@/util/filesystem"
 import BUILD_SWITCH from "@/session/prompt/build-switch.txt"
 
 export default {
+  name: "plan",
   description: "Plan mode. Disallows all edit tools.",
   mode: "primary",
   switch: true,
@@ -106,4 +107,4 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       BUILD_SWITCH + "\n\n" + `A plan file exists at ${input.plan}. You should execute on the plan defined within it`
     )
   },
-}
+} satisfies Agent.Source
