@@ -14,6 +14,7 @@ type Pref = {
   tool_start: boolean
   tool_finish: boolean
   tool_error: boolean
+  volume: number
 }
 
 const init: Pref = {
@@ -23,6 +24,11 @@ const init: Pref = {
   tool_start: false,
   tool_finish: false,
   tool_error: false,
+  volume: 10,
+}
+
+function clamp(volume: number) {
+  return Math.min(100, Math.max(0, Math.round(volume)))
 }
 
 function norm(input: unknown): Pref {
@@ -35,6 +41,7 @@ function norm(input: unknown): Pref {
     tool_start: typeof item.tool_start === "boolean" ? item.tool_start : init.tool_start,
     tool_finish: typeof item.tool_finish === "boolean" ? item.tool_finish : init.tool_finish,
     tool_error: typeof item.tool_error === "boolean" ? item.tool_error : init.tool_error,
+    volume: typeof item.volume === "number" ? clamp(item.volume) : init.volume,
   }
 }
 
@@ -46,9 +53,10 @@ export const { use: useSound, provider: SoundProvider } = createSimpleContext({
     const route = useRoute()
     const sync = useSync()
     const [store, setStore] = createStore(norm(kv.get("sound", init)))
-    const seen = new Set<string>()
     const tool = new Map<string, string>()
     const last = new Map<string, number>()
+    const status = new Map<string, string>()
+    const pending = new Map<string, Set<string>>()
 
     function current() {
       if (route.data.type !== "session") return
@@ -60,12 +68,17 @@ export const { use: useSound, provider: SoundProvider } = createSimpleContext({
       kv.set("sound", next)
     }
 
-    function set(key: keyof Pref, value: boolean) {
+    function set(key: keyof Pref, value: boolean | number) {
       save({ ...store, [key]: value })
     }
 
     function toggle(key: keyof Pref) {
+      if (key === "volume") return
       set(key, !store[key])
+    }
+
+    function volume(next: number) {
+      set("volume", clamp(next))
     }
 
     function ping(name: keyof Pref, intent: Player.Intent, key: string = intent) {
@@ -73,33 +86,63 @@ export const { use: useSound, provider: SoundProvider } = createSimpleContext({
       const now = Date.now()
       if (now - (last.get(key) ?? 0) < 250) return
       last.set(key, now)
-      void Player.play(intent)
+      void Player.play(intent, store.volume)
     }
 
     function preview(intent: Player.Intent) {
-      void Player.play(intent)
+      void Player.play(intent, store.volume)
+    }
+
+    function wait(sessionID: string, id: string) {
+      const set = pending.get(sessionID) ?? new Set<string>()
+      set.add(id)
+      pending.set(sessionID, set)
+    }
+
+    function resolve(sessionID: string, id: string) {
+      const set = pending.get(sessionID)
+      if (!set) return
+      set.delete(id)
+      if (set.size) return
+      pending.delete(sessionID)
     }
 
     sdk.event.listen((e) => {
       const evt = e.details
-      if (evt.type === "message.updated") {
-        const info = evt.properties.info
-        if (info.role !== "assistant") return
-        if (!info.time.completed) return
-        if (current() !== info.sessionID) return
-        if (seen.has(info.id)) return
-        seen.add(info.id)
-        ping("agent_finished", "agent-finished", info.id)
+      if (evt.type === "session.status") {
+        if (current() !== evt.properties.sessionID) return
+        const prev = status.get(evt.properties.sessionID)
+        const next = evt.properties.status.type
+        status.set(evt.properties.sessionID, next)
+        if (next !== "idle" || prev === "idle") return
+        if (pending.get(evt.properties.sessionID)?.size) return
+        if ((sync.data.permission[evt.properties.sessionID]?.length ?? 0) > 0) return
+        if ((sync.data.question[evt.properties.sessionID]?.length ?? 0) > 0) return
+        const list = sync.data.message[evt.properties.sessionID] ?? []
+        const info = list[list.length - 1]
+        if (!info || info.role !== "assistant") return
+        if (info.error || !info.time.completed) return
+        ping("agent_finished", "agent-finished", `${evt.properties.sessionID}:idle`)
         return
       }
       if (evt.type === "permission.asked") {
         if (current() !== evt.properties.sessionID) return
+        wait(evt.properties.sessionID, evt.properties.id)
         ping("needs_input", "needs-input", evt.properties.id)
+        return
+      }
+      if (evt.type === "permission.replied") {
+        resolve(evt.properties.sessionID, evt.properties.requestID)
         return
       }
       if (evt.type === "question.asked") {
         if (current() !== evt.properties.sessionID) return
+        wait(evt.properties.sessionID, evt.properties.id)
         ping("needs_input", "needs-input", evt.properties.id)
+        return
+      }
+      if (evt.type === "question.replied" || evt.type === "question.rejected") {
+        resolve(evt.properties.sessionID, evt.properties.requestID)
         return
       }
       if (evt.type === Session.Event.Error.type) {
@@ -137,6 +180,7 @@ export const { use: useSound, provider: SoundProvider } = createSimpleContext({
       },
       set,
       toggle,
+      volume,
       preview,
     }
   },

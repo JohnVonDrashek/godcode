@@ -22,23 +22,35 @@ export namespace Sound {
     process.stdout.write("\x07")
   }
 
+  function clamp(volume: number) {
+    return Math.min(100, Math.max(0, Math.round(volume)))
+  }
+
+  function level(volume: number) {
+    return clamp(volume) / 100
+  }
+
   const player = lazy(() => {
     const os = platform()
 
     if (os === "darwin" && which("afplay")) {
-      return async (file: string) => {
-        const proc = Process.spawn(["afplay", file], { stdout: "ignore", stderr: "ignore" })
+      return async (file: string, volume: number) => {
+        const proc = Process.spawn(["afplay", "-v", String(level(volume)), file], {
+          stdout: "ignore",
+          stderr: "ignore",
+        })
         await proc.exited.catch(() => {})
       }
     }
 
     if (os === "win32") {
-      return async (file: string) => {
+      return async (file: string, volume: number) => {
         const uri = pathToFileURL(file).href.replace(/'/g, "''")
         const script = [
           "Add-Type -AssemblyName presentationCore",
           "$p = New-Object System.Windows.Media.MediaPlayer",
           `$p.Open([Uri]'${uri}')`,
+          `$p.Volume = ${level(volume)}`,
           "$p.Play()",
           "Start-Sleep -Milliseconds 1500",
           "$p.Close()",
@@ -53,14 +65,20 @@ export namespace Sound {
 
     if (os === "linux" || release().includes("WSL")) {
       if (which("paplay")) {
-        return async (file: string) => {
-          const proc = Process.spawn(["paplay", file], { stdout: "ignore", stderr: "ignore" })
+        return async (file: string, volume: number) => {
+          const proc = Process.spawn(["paplay", `--volume=${Math.round(level(volume) * 65536)}`, file], {
+            stdout: "ignore",
+            stderr: "ignore",
+          })
           await proc.exited.catch(() => {})
         }
       }
       if (which("mpg123")) {
-        return async (file: string) => {
-          const proc = Process.spawn(["mpg123", "-q", file], { stdout: "ignore", stderr: "ignore" })
+        return async (file: string, volume: number) => {
+          const proc = Process.spawn(["mpg123", "-q", "-f", String(Math.round(level(volume) * 32768)), file], {
+            stdout: "ignore",
+            stderr: "ignore",
+          })
           await proc.exited.catch(() => {})
         }
       }
@@ -71,11 +89,14 @@ export namespace Sound {
         }
       }
       if (which("ffplay")) {
-        return async (file: string) => {
-          const proc = Process.spawn(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", file], {
-            stdout: "ignore",
-            stderr: "ignore",
-          })
+        return async (file: string, volume: number) => {
+          const proc = Process.spawn(
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-volume", String(clamp(volume)), file],
+            {
+              stdout: "ignore",
+              stderr: "ignore",
+            },
+          )
           await proc.exited.catch(() => {})
         }
       }
@@ -86,8 +107,8 @@ export namespace Sound {
     }
   })
 
-  export async function play(intent: Intent) {
+  export async function play(intent: Intent, volume: number = 100) {
     const file = files[intent]
-    await player()(file)
+    await player()(file, volume)
   }
 }
