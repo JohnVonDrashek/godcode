@@ -7,10 +7,13 @@ description: Use for testing via browser manually. Best for really understanding
 
 Use `@playwright/cli` for browser interaction.
 
+**IMPORTANT:** Always use a unique named session (`-s=`) for every browser interaction to avoid conflicts with other agents. `openssl rand -hex 6` for random string. 
+
+### Start
 If it is not, installed you can ask user permission to install with this command:
   - `npm install -g @playwright/cli@latest`
 
-**IMPORTANT:** Always use a unique named session (`-s=`) for every browser interaction to avoid conflicts with other agents. `openssl rand -hex 6` for random string. 
+Make sure to add .playwright-cli to the .gitignore because that's where all of your session data is getting dumped.
 
 ### Named sessions (`-s=name`)
 
