@@ -17,7 +17,7 @@ type Pref = {
 }
 
 const init: Pref = {
-  agent_finished: true,
+  agent_finished: false,
   needs_input: false,
   error: false,
   tool_start: false,
