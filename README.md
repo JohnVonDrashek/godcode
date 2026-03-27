@@ -1,32 +1,37 @@
 # HolyCode
 
-CrusadeSoft's terminal-first AI coding agent fork.
+Terminal-first coding agent for real projects.
 
-## What It Does
+HolyCode is CrusadeSoft's public fork of OpenCode, focused on an interactive terminal workflow plus scriptable one-shot runs.
 
-- Runs an interactive AI coding assistant in the terminal
-- Supports one-shot CLI runs like code review, repo summaries, and edits
-- Publishes fork-owned packages for the CLI, SDK, and plugin layer
+Repository: `https://github.com/crusadesoft/holycode`
 
 ## Why HolyCode
 
-- Keeps this fork installable under CrusadeSoft-owned package names
-- Gives us a place to ship fork-specific workflow and product changes
-- Separates HolyCode usage from the upstream OpenCode branding
+- Interactive terminal UI with `holycode`
+- One-shot execution with `holycode run`
+- Project-aware runs in the current repo or a target directory
+- Provider and model management from the CLI
+- SDK and plugin packages for integrations and extensions
+
+The source repository is public. The published packages are currently private on GitHub Packages.
 
 ## Install
 
-- GitHub Packages only
-- Current package visibility: private
-- You need GitHub access to the package before install will work
+HolyCode packages are currently distributed through GitHub Packages only.
 
-1. Create a GitHub token with package read access.
+You need:
+
+- access to the `@crusadesoft` packages
+- a GitHub token with package read access
+
+Export a token first:
 
 ```bash
 export GITHUB_TOKEN=your_github_token
 ```
 
-2. Add scope and auth config to `.npmrc`.
+Configure npm auth:
 
 ```ini
 @crusadesoft:registry=https://npm.pkg.github.com
@@ -34,58 +39,129 @@ export GITHUB_TOKEN=your_github_token
 always-auth=true
 ```
 
-3. Install the package you need.
+Install the CLI:
 
 ```bash
-# CLI
-npm install -g @crusadesoft/holycode
-
-# SDK
-npm install @crusadesoft/sdk
-
-# Plugin
-npm install @crusadesoft/plugin
+npm install -g @crusadesoft/holycode@0.0.2
 ```
 
-4. Optional package manager variants.
+Install the libraries:
 
 ```bash
-pnpm add -g @crusadesoft/holycode
-pnpm add @crusadesoft/sdk @crusadesoft/plugin
-
-yarn global add @crusadesoft/holycode
-yarn add @crusadesoft/sdk @crusadesoft/plugin
-
-bun add -g @crusadesoft/holycode
-bun add @crusadesoft/sdk @crusadesoft/plugin
+npm install @crusadesoft/sdk@0.0.2
+npm install @crusadesoft/plugin@0.0.2
 ```
 
-## Usage
+You can use `pnpm`, `yarn`, or `bun` instead if you prefer.
 
-- Start the interactive CLI:
+## Quick Start
+
+Show the command list:
+
+```bash
+holycode --help
+```
+
+Start the interactive UI in the current directory:
 
 ```bash
 holycode
 ```
 
-- Run a one-shot prompt:
+Start it in another project:
+
+```bash
+holycode /path/to/project
+```
+
+Before doing real work, sign in to a provider or configure provider credentials for the models you want to use:
+
+```bash
+holycode providers list
+holycode providers login
+holycode models
+```
+
+## Common Usage
+
+Run a single prompt without entering the full UI:
 
 ```bash
 holycode run "Review this repository and suggest the next refactor"
 ```
 
-- Run against a specific directory:
+Run against a specific directory:
 
 ```bash
-holycode run --dir /path/to/project "Summarize the current codebase"
+holycode run --dir /path/to/project "Summarize this codebase"
+```
+
+Attach files to a run:
+
+```bash
+holycode run -f README.md -f package.json "Suggest cleanup work"
+```
+
+Continue the last session:
+
+```bash
+holycode run --continue "Apply the next step"
+```
+
+Pick a model explicitly when needed:
+
+```bash
+holycode run -m openai/gpt-5 "Draft a migration plan"
 ```
 
 ## Packages
 
-- CLI: `@crusadesoft/holycode`
-- SDK: `@crusadesoft/sdk`
-- Plugin: `@crusadesoft/plugin`
+`@crusadesoft/holycode`
+
+- Terminal app and CLI
+- Current private package version: `0.0.2`
+
+`@crusadesoft/sdk`
+
+- Typed client package for integrating with HolyCode programmatically
+- Current private package version: `0.0.2`
+
+`@crusadesoft/plugin`
+
+- Plugin API for custom hooks and tools
+- Current private package version: `0.0.2`
+
+## Develop Locally
+
+HolyCode development uses Bun.
+
+```bash
+bun install
+bun dev
+```
+
+Run it against another directory:
+
+```bash
+bun dev /path/to/project
+```
+
+If you change the internal client/server contract, regenerate the JavaScript SDK:
+
+```bash
+./packages/sdk/js/script/build.ts
+```
 
 ## Contributing
 
-- For repository contribution guidelines, see `CONTRIBUTING.md`
+Read `CONTRIBUTING.md` before opening a PR.
+
+Good contributions include:
+
+- bug fixes
+- provider support
+- environment and packaging fixes
+- performance work
+- documentation improvements
+
+For larger product or UI changes, start with an issue and expect design review first.
