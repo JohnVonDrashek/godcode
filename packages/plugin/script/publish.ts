@@ -9,6 +9,7 @@ process.chdir(dir)
 await $`bun tsc`
 const pkg = (await import("../package.json").then((m) => m.default)) as {
   name: string
+  version: string
   dependencies?: Record<string, string>
   exports: Record<string, string | { import: string; types: string }>
   publishConfig?: {
@@ -34,10 +35,11 @@ for (const [key, value] of Object.entries(pkg.exports)) {
   }
 }
 if (name) pkg.name = name
+pkg.version = Script.version
 const dep = pkg.dependencies?.["@opencode-ai/sdk"]
 if (sdk && dep && pkg.dependencies) {
   delete pkg.dependencies["@opencode-ai/sdk"]
-  pkg.dependencies[sdk] = dep
+  pkg.dependencies[sdk] = Script.version
 }
 if (reg) pkg.publishConfig = { registry: reg }
 if (repo) pkg.repository = { type: "git", url: repo }

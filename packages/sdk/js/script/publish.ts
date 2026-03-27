@@ -9,6 +9,7 @@ process.chdir(dir)
 
 const pkg = (await import("../package.json").then((m) => m.default)) as {
   name: string
+  version: string
   exports: Record<string, string | object>
   publishConfig?: {
     registry: string
@@ -39,6 +40,7 @@ function transformExports(exports: Record<string, string | object>) {
 
 transformExports(pkg.exports)
 if (name) pkg.name = name
+pkg.version = Script.version
 if (reg) pkg.publishConfig = { registry: reg }
 if (repo) pkg.repository = { type: "git", url: repo }
 await Bun.write("package.json", JSON.stringify(pkg, null, 2))
