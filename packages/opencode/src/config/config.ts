@@ -704,6 +704,7 @@ export namespace Config {
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    disabled: z.array(z.string()).optional().describe("Disable skills by name without deleting them"),
     urls: z
       .array(z.string())
       .optional()

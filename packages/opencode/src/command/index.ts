@@ -121,7 +121,7 @@ export namespace Command {
           }
         }
 
-        for (const skill of yield* Effect.promise(() => Skill.all())) {
+        for (const skill of yield* Effect.promise(() => Skill.available())) {
           if (commands[skill.name]) continue
           commands[skill.name] = {
             name: skill.name,

@@ -17,7 +17,7 @@ export function DialogSkill(props: DialogSkillProps) {
   const { theme } = useTheme()
   const toast = useToast()
   dialog.setSize("large")
-  const [toDelete, setToDelete] = createSignal<string>()
+  const [pending, setPending] = createSignal<string>()
 
   const [skills, { refetch }] = createResource(async () => {
     const result = await sdk.client.app.skills()
@@ -29,15 +29,19 @@ export function DialogSkill(props: DialogSkillProps) {
     const maxWidth = Math.max(0, ...list.map((s) => s.name.length))
     return list.map((skill) => ({
       title:
-        toDelete() === skill.name
+        pending() === skill.name
           ? `Press ${keybind.print("session_delete")} again to confirm`
           : skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
       value: skill.name,
-      category: skill.deletable ? "Skills" : "Remote Skills",
-      footer: skill.deletable ? undefined : "read-only",
-      bg: toDelete() === skill.name ? theme.error : undefined,
+      category: skill.disabled ? "Disabled Skills" : skill.deletable ? "Skills" : "Read-only Skills",
+      footer: skill.disabled ? "disabled" : skill.deletable ? undefined : "read-only",
+      bg: pending() === skill.name ? theme.error : undefined,
       onSelect: () => {
+        if (skill.disabled) {
+          toast.show({ message: "This skill is disabled", variant: "info" })
+          return
+        }
         props.onSelect(skill.name)
         dialog.clear()
       },
@@ -50,25 +54,47 @@ export function DialogSkill(props: DialogSkillProps) {
       placeholder="Search skills..."
       options={options()}
       onMove={() => {
-        setToDelete(undefined)
+        setPending(undefined)
       }}
       keybind={[
         {
           keybind: keybind.all.session_delete?.[0],
-          title: "delete",
+          title: "delete/disable",
           onTrigger: async (option) => {
             const skill = (skills() ?? []).find((item) => item.name === option.value)
             if (!skill) return
-            if (!skill.deletable) {
-              toast.show({ message: "This skill is read-only", variant: "info" })
+            if (pending() !== option.value) {
+              setPending(option.value)
               return
             }
-            if (toDelete() !== option.value) {
-              setToDelete(option.value)
+            setPending(undefined)
+            if (!skill.deletable) {
+              const cfg = await sdk.client.global.config.get().catch(() => undefined)
+              if (cfg?.error || !cfg?.data) {
+                toast.show({ message: "Failed to load global config", variant: "error" })
+                return
+              }
+              const disabled = new Set(cfg.data.skills?.disabled ?? [])
+              if (skill.disabled) disabled.delete(skill.name)
+              else disabled.add(skill.name)
+              const result = await sdk.client.global.config
+                .update({
+                  config: {
+                    skills: {
+                      disabled: Array.from(disabled).toSorted(),
+                    },
+                  },
+                })
+                .catch(() => undefined)
+              if (result?.error) {
+                toast.show({ message: `Failed to ${skill.disabled ? "enable" : "disable"} skill`, variant: "error" })
+                return
+              }
+              await refetch()
+              toast.show({ message: `Skill ${skill.disabled ? "enabled" : "disabled"}`, variant: "success" })
               return
             }
             const result = await sdk.client.app.skill.remove({ name: option.value }).catch(() => undefined)
-            setToDelete(undefined)
             if (result?.error) {
               toast.show({ message: "Failed to delete skill", variant: "error" })
               return

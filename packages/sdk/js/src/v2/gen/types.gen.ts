@@ -1355,6 +1355,10 @@ export type Config = {
      */
     paths?: Array<string>
     /**
+     * Disable skills by name without deleting them
+     */
+    disabled?: Array<string>
+    /**
      * URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)
      */
     urls?: Array<string>
@@ -5024,8 +5028,9 @@ export type AppSkillsResponses = {
     description: string
     location: string
     content: string
-    kind: "project" | "global" | "config" | "remote"
+    kind: "builtin" | "project" | "global" | "config" | "remote"
     deletable: boolean
+    disabled: boolean
   }>
 }
 

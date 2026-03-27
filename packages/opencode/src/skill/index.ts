@@ -38,6 +38,7 @@ export namespace Skill {
     content: z.string(),
     kind: Kind,
     deletable: z.boolean(),
+    disabled: z.boolean(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -62,6 +63,7 @@ export namespace Skill {
   type State = {
     skills: Record<string, Info>
     dirs: Set<string>
+    disabled: Set<string>
     task?: Promise<void>
   }
 
@@ -109,6 +111,7 @@ export namespace Skill {
       content: md.content,
       kind,
       deletable: kind !== "builtin" && kind !== "remote",
+      disabled: state.disabled.has(parsed.data.name),
     }
   }
 
@@ -154,9 +157,13 @@ export namespace Skill {
     const state: State = {
       skills: {},
       dirs: new Set<string>(),
+      disabled: new Set<string>(),
     }
 
     const load = async () => {
+      const cfg = await Config.get()
+      state.disabled = new Set(cfg.skills?.disabled ?? [])
+
       await scan(state, DotOpencode.root(), "skills/**/SKILL.md", { kind: "builtin" })
 
       if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
@@ -179,7 +186,6 @@ export namespace Skill {
         await scan(state, dir, OPENCODE_SKILL_PATTERN, { kind: "config" })
       }
 
-      const cfg = await Config.get()
       for (const item of cfg.skills?.paths ?? []) {
         const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
         const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
@@ -231,7 +237,9 @@ export namespace Skill {
 
       const get = Effect.fn("Skill.get")(function* (name: string) {
         const cache = yield* ensure()
-        return cache.skills[name]
+        const skill = cache.skills[name]
+        if (skill?.disabled) return
+        return skill
       })
 
       const all = Effect.fn("Skill.all")(function* () {
@@ -246,7 +254,9 @@ export namespace Skill {
 
       const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
         const cache = yield* ensure()
-        const list = Object.values(cache.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+        const list = Object.values(cache.skills)
+          .filter((skill) => !skill.disabled)
+          .toSorted((a, b) => a.name.localeCompare(b.name))
         if (!agent) return list
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
