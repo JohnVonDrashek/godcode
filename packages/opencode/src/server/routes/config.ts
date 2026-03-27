@@ -18,6 +18,10 @@ const TuneUpdate = z.object({
   }),
 })
 
+const BigPictureUpdate = z.object({
+  big_picture: z.string().optional(),
+})
+
 export const ConfigRoutes = lazy(() =>
   new Hono()
     .get(
@@ -88,6 +92,31 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         const input = c.req.valid("json")
         await Config.updateProjectTune(input)
+        return c.json(true)
+      },
+    )
+    .patch(
+      "/big-picture",
+      describeRoute({
+        summary: "Update project big picture",
+        description: "Update the project vision stored in the root holycode config file for the current project.",
+        operationId: "config.bigPicture.update",
+        responses: {
+          200: {
+            description: "Successfully updated project big picture",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", BigPictureUpdate),
+      async (c) => {
+        const input = c.req.valid("json")
+        await Config.updateProject(input)
         return c.json(true)
       },
     )

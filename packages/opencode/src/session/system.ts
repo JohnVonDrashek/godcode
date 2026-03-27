@@ -14,6 +14,7 @@ import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 import { Tune } from "@/util/tune"
+import { Config } from "@/config/config"
 
 export namespace SystemPrompt {
   export function provider(model: Provider.Model) {
@@ -59,6 +60,17 @@ export namespace SystemPrompt {
         `</directories>`,
       ].join("\n"),
     ]
+  }
+
+  export async function picture() {
+    const text = (await Config.get()).big_picture?.trim()
+    if (!text) return
+    return [
+      "Here is the project's big picture. Use it to keep decisions aligned with the long-term goal while still following the user's direct request.",
+      "<big-picture>",
+      text,
+      "</big-picture>",
+    ].join("\n")
   }
 
   export async function skills(agent: Agent.Info) {

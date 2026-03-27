@@ -1165,6 +1165,10 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      big_picture: z
+        .string()
+        .optional()
+        .describe("Project vision that is injected as a dedicated system prompt layer for every non-isolated run"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
@@ -1345,6 +1349,43 @@ export namespace Config {
     const existing = await loadFile(filepath)
     await Filesystem.writeJson(filepath, mergeDeep(existing, config))
     await Instance.dispose()
+  }
+
+  function root() {
+    return Instance.worktree === "/" ? Instance.directory : Instance.worktree
+  }
+
+  function projectConfigFile() {
+    const files = ConfigPaths.fileInDirectory(root(), "holycode")
+    for (const file of files) {
+      if (existsSync(file)) return file
+    }
+    return files[1]
+  }
+
+  export async function updateProject(config: Info) {
+    const filepath = projectConfigFile()
+    const before = await Filesystem.readText(filepath).catch((err: any) => {
+      if (err.code === "ENOENT") return "{}"
+      throw new JsonError({ path: filepath }, { cause: err })
+    })
+
+    const next = await (async () => {
+      if (!filepath.endsWith(".jsonc")) {
+        const merged = mergeDeep(parseConfig(before, filepath), config)
+        merged.$schema ??= "https://opencode.ai/config.json"
+        await Filesystem.writeJson(filepath, merged)
+        return merged
+      }
+
+      const updated = patchJsonc(before, config)
+      const merged = parseConfig(updated, filepath)
+      await Filesystem.write(filepath, updated)
+      return merged
+    })()
+
+    await Instance.dispose()
+    return next
   }
 
   async function ensureTuneGitIgnore(dir: string) {

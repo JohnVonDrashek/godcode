@@ -59,6 +59,7 @@ import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { Tune } from "@/util/tune"
 import { DialogTune } from "../dialog-tune"
+import { formatAgentView } from "@tui/util/agent-view"
 
 export type PromptProps = {
   sessionID?: string
@@ -116,6 +117,84 @@ export function Prompt(props: PromptProps) {
     if (sync.data.provider.length === 0) {
       dialog.replace(() => <DialogProviderConnect />)
     }
+  }
+
+  function draft(text = store.prompt.input) {
+    let inputText = text
+
+    const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
+    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
+
+    for (const extmark of sortedExtmarks) {
+      const partIndex = store.extmarkToPartIndex.get(extmark.id)
+      if (partIndex !== undefined) {
+        const part = store.prompt.parts[partIndex]
+        if (part?.type === "text" && part.text) {
+          const before = inputText.slice(0, extmark.start)
+          const after = inputText.slice(extmark.end)
+          inputText = before + part.text + after
+        }
+      }
+    }
+
+    return {
+      inputText,
+      parts: store.prompt.parts.filter((part) => part.type !== "text"),
+    }
+  }
+
+  async function runAgentView(text?: string) {
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
+
+    const data = draft(text)
+    const result = await sdk.client.session.agentView({
+      ...(props.sessionID ? { sessionID: props.sessionID } : {}),
+      agent: local.agent.current().name,
+      model: selectedModel,
+      variant: local.model.variant.current(),
+      prompt: tunePrompt(),
+      parts: [
+        ...(data.inputText.trim()
+          ? [
+              {
+                id: PartID.ascending(),
+                type: "text" as const,
+                text: data.inputText,
+              },
+            ]
+          : []),
+        ...data.parts.map(assign),
+      ],
+    })
+
+    if (result.error || !result.data) {
+      toast.show({
+        message: result.error instanceof Error ? result.error.message : "Failed to export agent view",
+        variant: "error",
+      })
+      return
+    }
+
+    const root = sync.data.path.worktree || sync.data.path.directory
+    const dir = path.join(root, ".holycode", "agent-view")
+    const base = `${Date.now()}`
+    const file = path.join(dir, `${base}.json`)
+    const view = path.join(dir, `${base}.md`)
+    const json = JSON.stringify(result.data, null, 2)
+    await Filesystem.write(file, json)
+    await Filesystem.write(view, formatAgentView(result.data, file))
+    const edited = await Editor.open({ value: await Filesystem.readText(view), renderer })
+    if (edited !== undefined) {
+      await Filesystem.write(view, edited)
+    }
+    toast.show({
+      message: `Agent view exported to ${view}`,
+      variant: "success",
+    })
   }
 
   const textareaKeybindings = useTextareaKeybindings()
@@ -434,6 +513,18 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Agent view",
+        value: "prompt.agent_view",
+        category: "Prompt",
+        slash: {
+          name: "agent-view",
+        },
+        onSelect: async (dialog, trigger) => {
+          await runAgentView(trigger?.args)
+          dialog.clear()
+        },
+      },
+      {
         title: "Skills",
         value: "prompt.skills",
         category: "Prompt",
@@ -683,6 +774,11 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
+    const firstLineEnd = inputText.indexOf("\n")
+    const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+    const [slashName, ...slashArgs] = firstLine.split(" ")
+    const slashText = slashArgs.join(" ") + (firstLineEnd === -1 ? "" : "\n" + inputText.slice(firstLineEnd + 1))
+
     if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
@@ -696,15 +792,18 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
+      command.triggerSlash(slashName.slice(1), {
+        text: inputText,
+        args: slashText,
+      })
+    ) {
+    } else if (
+      inputText.startsWith("/") &&
       iife(() => {
-        const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
-        return sync.data.command.some((x) => x.name === command)
+        return sync.data.command.some((x) => x.name === slashName.slice(1))
       })
     ) {
       // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
       const [command, ...firstLineArgs] = firstLine.split(" ")
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")

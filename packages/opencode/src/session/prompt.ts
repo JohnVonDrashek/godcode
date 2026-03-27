@@ -49,6 +49,8 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { Installation } from "@/installation"
+import { Slug } from "@opencode-ai/util/slug"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -185,11 +187,25 @@ export namespace SessionPrompt {
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
+  export const AgentViewInput = PromptInput.omit({ messageID: true }).extend({
+    sessionID: SessionID.zod.optional(),
+  })
+  export type AgentViewInput = z.infer<typeof AgentViewInput>
+
+  export const AgentViewOutput = z.object({
+    providerID: z.string(),
+    modelID: z.string(),
+    agent: z.string(),
+    sessionID: z.string(),
+    request: z.any(),
+  })
+  export type AgentViewOutput = z.infer<typeof AgentViewOutput>
+
   export const prompt = fn(PromptInput, async (input) => {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    const message = await createUserMessage(input)
+    const message = await buildUserMessage(input)
     await Session.touch(input.sessionID)
 
     // this is backwards compatibility for allowing `tools` to be specified when
@@ -789,11 +805,13 @@ export namespace SessionPrompt {
       }
 
       // Build system prompt, adding structured output instruction if needed
-      // Shadow agent doesn't need AGENTS.md instructions or skills — just its own prompt + environment
+      // Shadow agent doesn't need AGENTS.md instructions or skills — just its own prompt, environment, and big picture
       const isShadowAgent = agent.name === "shadow"
+      const picture = solo ? null : await SystemPrompt.picture()
       const skills = solo || isShadowAgent ? null : await SystemPrompt.skills(agent)
       const system = [
         ...(solo ? [] : await SystemPrompt.environment(model)),
+        ...(picture ? [picture] : []),
         ...(skills ? [skills] : []),
         ...(solo || isShadowAgent ? [] : await InstructionPrompt.system()),
       ]
@@ -1146,7 +1164,7 @@ export namespace SessionPrompt {
     })
   }
 
-  async function createUserMessage(input: PromptInput) {
+  async function buildUserMessage(input: PromptInput, options?: { persist?: boolean }) {
     const agentName = input.agent || (await Agent.defaultAgent())
     const agent = await Agent.get(agentName)
     if (!agent) {
@@ -1543,9 +1561,11 @@ export namespace SessionPrompt {
       })
     })
 
-    await Session.updateMessage(info)
-    for (const part of parts) {
-      await Session.updatePart(part)
+    if (options?.persist !== false) {
+      await Session.updateMessage(info)
+      for (const part of parts) {
+        await Session.updatePart(part)
+      }
     }
 
     return {
@@ -1554,7 +1574,12 @@ export namespace SessionPrompt {
     }
   }
 
-  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
+  async function insertReminders(input: {
+    messages: MessageV2.WithParts[]
+    agent: Agent.Info
+    session: Session.Info
+    persist?: boolean
+  }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
 
@@ -1565,7 +1590,7 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)
       if (exists) {
-        const part = await Session.updatePart({
+        const part = {
           id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
@@ -1573,7 +1598,8 @@ export namespace SessionPrompt {
           text:
             BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
           synthetic: true,
-        })
+        } satisfies MessageV2.TextPart
+        if (input.persist !== false) await Session.updatePart(part)
         userMessage.parts.push(part)
       }
       return input.messages
@@ -1583,8 +1609,8 @@ export namespace SessionPrompt {
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)
-      if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
-      const part = await Session.updatePart({
+      if (!exists && input.persist !== false) await fs.mkdir(path.dirname(plan), { recursive: true })
+      const part = {
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
@@ -1660,12 +1686,162 @@ This is critical - your turn should only end with either asking the user a quest
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,
         synthetic: true,
-      })
+      } satisfies MessageV2.TextPart
+      if (input.persist !== false) await Session.updatePart(part)
       userMessage.parts.push(part)
       return input.messages
     }
     return input.messages
   }
+
+  function previewSession(sessionID: SessionID): Session.Info {
+    return {
+      id: sessionID,
+      slug: Slug.create(),
+      version: Installation.VERSION,
+      projectID: Instance.project.id,
+      directory: Instance.directory,
+      title: "Agent View",
+      time: {
+        created: Date.now(),
+        updated: Date.now(),
+      },
+    }
+  }
+
+  function previewAssistant(input: {
+    sessionID: SessionID
+    user: MessageV2.User
+    agent: Agent.Info
+    model: Provider.Model
+  }): MessageV2.Assistant {
+    return {
+      id: MessageID.ascending(),
+      parentID: input.user.id,
+      role: "assistant",
+      mode: input.agent.name,
+      agent: input.agent.name,
+      variant: input.user.variant,
+      path: {
+        cwd: Instance.directory,
+        root: Instance.worktree,
+      },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: input.model.id,
+      providerID: input.model.providerID,
+      time: {
+        created: Date.now(),
+      },
+      sessionID: input.sessionID,
+    }
+  }
+
+  export const agentView = fn(AgentViewInput, async (input) => {
+    const sessionID = input.sessionID ?? SessionID.descending()
+    const session = input.sessionID ? await Session.get(input.sessionID) : previewSession(sessionID)
+    const built = await buildUserMessage({ ...input, sessionID }, { persist: false })
+    let msgs = input.sessionID ? await MessageV2.filterCompacted(MessageV2.stream(sessionID)) : []
+    msgs = [...msgs, built]
+
+    let lastUser: MessageV2.User | undefined
+    let lastAssistant: MessageV2.Assistant | undefined
+    let lastFinished: MessageV2.Assistant | undefined
+    let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i]
+      if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
+      if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
+      if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
+        lastFinished = msg.info as MessageV2.Assistant
+      if (lastUser && lastFinished) break
+      const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
+      if (task && !lastFinished) tasks.push(...task)
+    }
+
+    if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+    if (tasks.length > 0) {
+      throw new Error("Agent view is only available when the session is idle.")
+    }
+
+    const solo = isolated(lastUser)
+    const agent = await Agent.get(lastUser.agent)
+    if (!agent) throw new Error(`Agent not found: ${lastUser.agent}`)
+    const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+    if (!solo) {
+      msgs = await insertReminders({
+        messages: msgs,
+        agent,
+        session,
+        persist: false,
+      })
+    }
+    if (!solo) {
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+    }
+
+    const processor = SessionProcessor.create({
+      assistantMessage: previewAssistant({
+        sessionID,
+        user: lastUser,
+        agent,
+        model,
+      }),
+      sessionID,
+      model,
+      abort: new AbortController().signal,
+    })
+
+    const lastUserMsg = msgs.findLast((msg) => msg.info.id === lastUser.id)
+    const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+    const tools = await resolveTools({
+      agent,
+      session,
+      model,
+      tools: lastUser.tools,
+      processor,
+      bypassAgentCheck,
+      messages: msgs,
+    })
+    if (lastUser.format?.type === "json_schema") {
+      tools["StructuredOutput"] = createStructuredOutputTool({
+        schema: lastUser.format.schema,
+        onSuccess() {},
+      })
+    }
+
+    const isShadowAgent = agent.name === "shadow"
+    const picture = solo ? null : await SystemPrompt.picture()
+    const skills = solo || isShadowAgent ? null : await SystemPrompt.skills(agent)
+    const system = [
+      ...(solo ? [] : await SystemPrompt.environment(model)),
+      ...(picture ? [picture] : []),
+      ...(skills ? [skills] : []),
+      ...(solo || isShadowAgent ? [] : await InstructionPrompt.system()),
+    ]
+    const format = lastUser.format ?? { type: "text" }
+    if (format.type === "json_schema") {
+      system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+    }
+
+    return LLM.snapshot({
+      user: lastUser,
+      agent,
+      permission: session.permission,
+      abort: new AbortController().signal,
+      sessionID,
+      system,
+      messages: MessageV2.toModelMessages(msgs, model),
+      tools,
+      model,
+      toolChoice: format.type === "json_schema" ? "required" : undefined,
+    })
+  })
 
   /**
    * Phase 1: Run the shadow agent in parallel with the main agent.

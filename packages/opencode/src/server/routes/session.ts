@@ -719,6 +719,30 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/agent-view",
+      describeRoute({
+        summary: "Export next agent call",
+        description: "Build the exact next agent request payload for a prompt without sending it to the model.",
+        operationId: "session.agentView",
+        responses: {
+          200: {
+            description: "Agent request snapshot",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPrompt.AgentViewOutput),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("json", SessionPrompt.AgentViewInput),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(await SessionPrompt.agentView(body))
+      },
+    )
+    .post(
       "/:sessionID/message",
       describeRoute({
         summary: "Send message",

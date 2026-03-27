@@ -10,6 +10,7 @@ import {
   type ToolSet,
   tool,
   jsonSchema,
+  asSchema,
 } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
@@ -45,26 +46,35 @@ export namespace LLM {
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
-  export async function stream(input: StreamInput) {
-    const l = log
-      .clone()
-      .tag("providerID", input.model.providerID)
-      .tag("modelID", input.model.id)
-      .tag("sessionID", input.sessionID)
-      .tag("small", (input.small ?? false).toString())
-      .tag("agent", input.agent.name)
-      .tag("mode", input.agent.mode)
-    l.info("stream", {
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-    })
+  type Prepared = {
+    cfg: Awaited<ReturnType<typeof Config.get>>
+    language: Awaited<ReturnType<typeof Provider.getLanguage>>
+    provider: Awaited<ReturnType<typeof Provider.getProvider>>
+    system: string[]
+    options: Record<string, any>
+    params: {
+      temperature: number | undefined
+      topP: number | undefined
+      topK: number | undefined
+      options: Record<string, any>
+    }
+    messages: ModelMessage[]
+    prompt: unknown
+    headers: Record<string, string>
+    providerOptions: Record<string, any>
+    tools: Record<string, Tool>
+    activeTools: string[]
+    maxOutputTokens: number | undefined
+    isOpenaiOauth: boolean
+  }
+
+  async function prepare(input: StreamInput): Promise<Prepared> {
     const [language, cfg, provider, auth] = await Promise.all([
       Provider.getLanguage(input.model),
       Config.get(),
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
     const solo = input.user.isolated === true
 
@@ -72,9 +82,7 @@ export namespace LLM {
     system.push(
       [
         ...SystemPrompt.prompt(input.model, input.agent, input.user.prompt),
-        // any custom prompt passed into this call
         ...input.system,
-        // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
       ]
         .filter((x) => x)
@@ -89,7 +97,6 @@ export namespace LLM {
         { system },
       )
     }
-    // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
       system.length = 0
@@ -177,13 +184,6 @@ export namespace LLM {
         : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
-
-    // LiteLLM and some Anthropic proxies require the tools parameter to be present
-    // when message history contains tool calls, even if no tools are being used.
-    // Add a dummy tool that is never called to satisfy this validation.
-    // This is enabled for:
-    // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-    // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
     const isLiteLLMProxy =
       provider.options?.["litellmProxy"] === true ||
       input.model.providerID.toLowerCase().includes("litellm") ||
@@ -198,12 +198,100 @@ export namespace LLM {
       })
     }
 
+    const finalHeaders = {
+      ...(input.model.providerID.startsWith("opencode")
+        ? {
+            "x-opencode-project": Instance.project.id,
+            "x-opencode-session": input.sessionID,
+            "x-opencode-request": input.user.id,
+            "x-opencode-client": Flag.OPENCODE_CLIENT,
+          }
+        : {
+            "User-Agent": `opencode/${Installation.VERSION}`,
+          }),
+      ...input.model.headers,
+      ...headers,
+    }
+
+    return {
+      cfg,
+      language,
+      provider,
+      system,
+      options,
+      params,
+      messages,
+      prompt: ProviderTransform.message(messages, input.model, options),
+      headers: finalHeaders,
+      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+      tools,
+      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+      maxOutputTokens,
+      isOpenaiOauth,
+    }
+  }
+
+  export async function snapshot(input: StreamInput) {
+    const prepared = await prepare(input)
+    return {
+      providerID: input.model.providerID,
+      modelID: input.model.id,
+      agent: input.agent.name,
+      sessionID: input.sessionID,
+      request: {
+        system: prepared.system,
+        messages: prepared.messages,
+        prompt: prepared.prompt,
+        headers: prepared.headers,
+        providerOptions: prepared.providerOptions,
+        activeTools: prepared.activeTools,
+        toolChoice: input.toolChoice,
+        maxOutputTokens: prepared.maxOutputTokens,
+        temperature: prepared.params.temperature,
+        topP: prepared.params.topP,
+        topK: prepared.params.topK,
+        isOpenaiOauth: prepared.isOpenaiOauth,
+        tools: Object.fromEntries(
+          Object.entries(prepared.tools).map(([key, item]) => [
+            key,
+            {
+              description: item.description,
+              inputSchema: asSchema(item.inputSchema).jsonSchema,
+            },
+          ]),
+        ),
+      },
+    }
+  }
+
+  export async function stream(input: StreamInput) {
+    const l = log
+      .clone()
+      .tag("providerID", input.model.providerID)
+      .tag("modelID", input.model.id)
+      .tag("sessionID", input.sessionID)
+      .tag("small", (input.small ?? false).toString())
+      .tag("agent", input.agent.name)
+      .tag("mode", input.agent.mode)
+    l.info("stream", {
+      modelID: input.model.id,
+      providerID: input.model.providerID,
+    })
+    const prepared = await prepare(input)
+    const language = prepared.language
+    const cfg = prepared.cfg
+    const provider = prepared.provider
+    const messages = prepared.messages
+    const params = prepared.params
+    const tools = prepared.tools
+    const maxOutputTokens = prepared.maxOutputTokens
+
     // Wire up toolExecutor for DWS workflow models so that tool calls
     // from the workflow service are executed via opencode's tool system
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language
-      workflowModel.systemPrompt = system.join("\n")
+      workflowModel.systemPrompt = prepared.system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
@@ -257,26 +345,13 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+      providerOptions: prepared.providerOptions,
+      activeTools: prepared.activeTools,
       tools,
       toolChoice: input.toolChoice,
       maxOutputTokens,
       abortSignal: input.abort,
-      headers: {
-        ...(input.model.providerID.startsWith("opencode")
-          ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": input.user.id,
-              "x-opencode-client": Flag.OPENCODE_CLIENT,
-            }
-          : {
-              "User-Agent": `opencode/${Installation.VERSION}`,
-            }),
-        ...input.model.headers,
-        ...headers,
-      },
+      headers: prepared.headers,
       maxRetries: input.retries ?? 0,
       messages,
       model: wrapLanguageModel({
@@ -286,7 +361,7 @@ export namespace LLM {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+                args.params.prompt = prepared.prompt
               }
               return args.params
             },

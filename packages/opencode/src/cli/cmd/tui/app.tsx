@@ -20,6 +20,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogBigPicture } from "@tui/component/dialog-big-picture"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -530,6 +531,19 @@ function App() {
         dialog.replace(() => <DialogProviderList />)
       },
       category: "Provider",
+    },
+    {
+      title: "Project vision",
+      value: "project.vision",
+      category: "Project",
+      suggested: true,
+      slash: {
+        name: "vision",
+        aliases: ["big-picture"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogBigPicture />)
+      },
     },
     {
       title: "View status",
