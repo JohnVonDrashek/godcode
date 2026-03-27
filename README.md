@@ -1,98 +1,91 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# HolyCode
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+CrusadeSoft's terminal-first AI coding agent fork.
 
----
+## What It Does
 
-### Installation
+- Runs an interactive AI coding assistant in the terminal
+- Supports one-shot CLI runs like code review, repo summaries, and edits
+- Publishes fork-owned packages for the CLI, SDK, and plugin layer
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+## Why HolyCode
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
+- Keeps this fork installable under CrusadeSoft-owned package names
+- Gives us a place to ship fork-specific workflow and product changes
+- Separates HolyCode usage from the upstream OpenCode branding
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+## Install
 
-#### Installation Directory
+- GitHub Packages only
+- Current package visibility: private
+- You need GitHub access to the package before install will work
 
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+1. Create a GitHub token with package read access.
 
 ```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+export GITHUB_TOKEN=your_github_token
 ```
 
-### Agents
+2. Add scope and auth config to `.npmrc`.
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+```ini
+@crusadesoft:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+always-auth=true
+```
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+3. Install the package you need.
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+```bash
+# CLI
+npm install -g @crusadesoft/holycode
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+# SDK
+npm install @crusadesoft/sdk
 
-### Documentation
+# Plugin
+npm install @crusadesoft/plugin
+```
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+4. Optional package manager variants.
 
-### Contributing
+```bash
+pnpm add -g @crusadesoft/holycode
+pnpm add @crusadesoft/sdk @crusadesoft/plugin
 
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+yarn global add @crusadesoft/holycode
+yarn add @crusadesoft/sdk @crusadesoft/plugin
 
-### Building on OpenCode
+bun add -g @crusadesoft/holycode
+bun add @crusadesoft/sdk @crusadesoft/plugin
+```
 
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+## Usage
 
-### FAQ
+- Start the interactive CLI:
 
-#### How is this different from Claude Code?
+```bash
+holycode
+```
 
-It's very similar to Claude Code in terms of capability. Here are the key differences:
+- Run a one-shot prompt:
 
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Out-of-the-box LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
+```bash
+holycode run "Review this repository and suggest the next refactor"
+```
 
----
+- Run against a specific directory:
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+```bash
+holycode run --dir /path/to/project "Summarize the current codebase"
+```
+
+## Packages
+
+- CLI: `@crusadesoft/holycode`
+- SDK: `@crusadesoft/sdk`
+- Plugin: `@crusadesoft/plugin`
+
+## Contributing
+
+- For repository contribution guidelines, see `CONTRIBUTING.md`
