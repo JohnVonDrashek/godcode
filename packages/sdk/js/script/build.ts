@@ -11,7 +11,7 @@ import path from "path"
 import { createClient } from "@hey-api/openapi-ts"
 
 const openapi = path.join(dir, "openapi.json")
-const { Server } = await import(pathToFileURL(path.join(dir, "../../opencode/src/server/server.ts")).href)
+const { Server } = await import(pathToFileURL(path.join(dir, "../../holycode/src/server/server.ts")).href)
 
 await Bun.write(openapi, JSON.stringify(await Server.openapi(), null, 2))
 
@@ -29,7 +29,7 @@ await createClient({
     },
     {
       name: "@hey-api/sdk",
-      instance: "OpencodeClient",
+      instance: "HolycodeClient",
       exportFromIndex: false,
       auth: false,
       paramsStructure: "flat",
@@ -41,6 +41,11 @@ await createClient({
     },
   ],
 })
+
+for (const file of ["./src/gen/sdk.gen.ts", "./src/v2/gen/sdk.gen.ts"]) {
+  const text = await Bun.file(file).text()
+  await Bun.write(file, text.replaceAll("OpencodeClient", "HolycodeClient"))
+}
 
 await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`

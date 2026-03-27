@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { Script } from "@opencode-ai/script"
+import { Script } from "@crusadesoft/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
@@ -21,10 +21,10 @@ const pkg = (await import("../package.json").then((m) => m.default)) as {
   }
 }
 const original = JSON.parse(JSON.stringify(pkg))
-const name = process.env.OPENCODE_PUBLISH_PACKAGE
-const reg = process.env.OPENCODE_PUBLISH_REGISTRY
-const repo = process.env.OPENCODE_PUBLISH_REPO
-const sdk = process.env.OPENCODE_PUBLISH_SDK_PACKAGE
+const name = process.env.HOLYCODE_PUBLISH_PACKAGE
+const reg = process.env.HOLYCODE_PUBLISH_REGISTRY
+const repo = process.env.HOLYCODE_PUBLISH_REPO
+const sdk = process.env.HOLYCODE_PUBLISH_SDK_PACKAGE
 
 for (const [key, value] of Object.entries(pkg.exports)) {
   if (typeof value !== "string") continue
@@ -36,9 +36,9 @@ for (const [key, value] of Object.entries(pkg.exports)) {
 }
 if (name) pkg.name = name
 pkg.version = Script.version
-const dep = pkg.dependencies?.["@opencode-ai/sdk"]
+const dep = pkg.dependencies?.["@crusadesoft/sdk"]
 if (sdk && dep && pkg.dependencies) {
-  delete pkg.dependencies["@opencode-ai/sdk"]
+  delete pkg.dependencies["@crusadesoft/sdk"]
   pkg.dependencies[sdk] = Script.version
 }
 if (reg) pkg.publishConfig = { registry: reg }

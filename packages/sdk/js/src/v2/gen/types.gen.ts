@@ -1319,7 +1319,7 @@ export type Config = {
   $schema?: string
   logLevel?: LogLevel
   /**
-   * Command configuration, see https://opencode.ai/docs/commands
+   * Command configuration, see https://holycode.ai/docs/commands
    */
   command?: {
     [key: string]: {
@@ -1392,11 +1392,13 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agents
+   * Agent configuration, see https://holycode.ai/docs/agents
    */
   agent?: {
     plan?: AgentConfig
     build?: AgentConfig
+    architect?: AgentConfig
+    refactor?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
     title?: AgentConfig

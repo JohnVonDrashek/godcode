@@ -3,7 +3,7 @@
 import path from "path"
 import { pathToFileURL } from "bun"
 import { parseArgs } from "util"
-import { createOpencode } from "./opencode"
+import { createHolycode } from "./holycode"
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -35,7 +35,7 @@ Examples:
     process.exit(1)
   }
 
-  const opencode = createOpencode()
+  const holycode = createHolycode()
 
   try {
     const parts: Array<{ type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }> =
@@ -58,8 +58,8 @@ Examples:
 
     parts.push({ type: "text", text: message })
 
-    const session = await opencode.client.session.create()
-    const result = await opencode.client.session
+    const session = await holycode.client.session.create()
+    const result = await holycode.client.session
       .prompt({
         path: { id: session.data!.id },
         body: {
@@ -72,7 +72,7 @@ Examples:
 
     console.log(result.trim())
   } finally {
-    opencode.server.close()
+    holycode.server.close()
   }
 }
 

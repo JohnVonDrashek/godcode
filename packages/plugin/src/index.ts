@@ -1,6 +1,6 @@
 import type {
   Event,
-  createOpencodeClient,
+  createHolycodeClient,
   Project,
   Model,
   Provider,
@@ -10,7 +10,7 @@ import type {
   Part,
   Auth,
   Config,
-} from "@opencode-ai/sdk"
+} from "@crusadesoft/sdk"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
@@ -24,7 +24,7 @@ export type ProviderContext = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createHolycodeClient>
   project: Project
   directory: string
   worktree: string

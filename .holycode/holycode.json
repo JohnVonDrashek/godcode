@@ -1,0 +1,19 @@
+{
+  "big_picture": "We are building Holycode: The open source AI coding agent that is very easy to use for beginners but still feature rich for experienced developers.",
+  "$schema": "https://holycode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "options": {}
+    }
+  },
+  "permission": {
+    "edit": {
+      "packages/holycode/migration/*": "deny"
+    }
+  },
+  "mcp": {},
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false
+  }
+}

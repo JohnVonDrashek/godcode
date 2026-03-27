@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@crusadesoft/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
@@ -20,9 +20,9 @@ const pkg = (await import("../package.json").then((m) => m.default)) as {
   }
 }
 const original = JSON.parse(JSON.stringify(pkg))
-const name = process.env.OPENCODE_PUBLISH_PACKAGE
-const reg = process.env.OPENCODE_PUBLISH_REGISTRY
-const repo = process.env.OPENCODE_PUBLISH_REPO
+const name = process.env.HOLYCODE_PUBLISH_PACKAGE
+const reg = process.env.HOLYCODE_PUBLISH_REGISTRY
+const repo = process.env.HOLYCODE_PUBLISH_REPO
 
 function transformExports(exports: Record<string, string | object>) {
   for (const [key, value] of Object.entries(exports)) {

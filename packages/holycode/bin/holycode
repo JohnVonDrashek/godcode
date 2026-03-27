@@ -1,0 +1,130 @@
+#!/usr/bin/env node
+
+import childProcess from "child_process"
+import fs from "fs"
+import os from "os"
+import path from "path"
+import { fileURLToPath } from "url"
+
+function run(target) {
+  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+    stdio: "inherit",
+  })
+  if (result.error) {
+    console.error(result.error.message)
+    process.exit(1)
+  }
+  process.exit(typeof result.status === "number" ? result.status : 0)
+}
+
+const env = process.env.HOLYCODE_BIN_PATH
+if (env) run(env)
+
+const dir = path.dirname(fs.realpathSync(fileURLToPath(import.meta.url)))
+const cached = path.join(dir, ".holycode")
+if (fs.existsSync(cached)) run(cached)
+
+const platform = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
+}[os.platform()] || os.platform()
+
+const arch = {
+  x64: "x64",
+  arm64: "arm64",
+  arm: "arm",
+}[os.arch()] || os.arch()
+
+function avx2() {
+  if (arch !== "x64") return false
+  if (platform === "linux") {
+    try {
+      return /(^|\s)avx2(\s|$)/i.test(fs.readFileSync("/proc/cpuinfo", "utf8"))
+    } catch {
+      return false
+    }
+  }
+  if (platform === "darwin") {
+    try {
+      const result = childProcess.spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], { encoding: "utf8", timeout: 1500 })
+      return result.status === 0 && (result.stdout || "").trim() === "1"
+    } catch {
+      return false
+    }
+  }
+  if (platform !== "windows") return false
+  const cmd =
+    '(Add-Type -MemberDefinition "[DllImport(""kernel32.dll"")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)'
+  for (const exe of ["powershell.exe", "pwsh.exe", "pwsh", "powershell"]) {
+    try {
+      const result = childProcess.spawnSync(exe, ["-NoProfile", "-NonInteractive", "-Command", cmd], {
+        encoding: "utf8",
+        timeout: 3000,
+        windowsHide: true,
+      })
+      if (result.status !== 0) continue
+      const out = (result.stdout || "").trim().toLowerCase()
+      if (out === "true" || out === "1") return true
+      if (out === "false" || out === "0") return false
+    } catch {
+      continue
+    }
+  }
+  return false
+}
+
+function names() {
+  const base = `holycode-${platform}-${arch}`
+  const baseline = arch === "x64" && !avx2()
+  if (platform === "linux") {
+    const musl = (() => {
+      try {
+        if (fs.existsSync("/etc/alpine-release")) return true
+      } catch {}
+      try {
+        const result = childProcess.spawnSync("ldd", ["--version"], { encoding: "utf8" })
+        return (((result.stdout || "") + (result.stderr || "")).toLowerCase().includes("musl"))
+      } catch {
+        return false
+      }
+    })()
+    if (musl) {
+      if (arch === "x64") return baseline ? [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base] : [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
+      return [`${base}-musl`, base]
+    }
+    if (arch === "x64") return baseline ? [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`] : [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]
+    return [base, `${base}-musl`]
+  }
+  if (arch === "x64") return baseline ? [`${base}-baseline`, base] : [base, `${base}-baseline`]
+  return [base]
+}
+
+function find(start) {
+  let current = start
+  const bin = platform === "windows" ? "holycode.exe" : "holycode"
+  for (;;) {
+    const modules = path.join(current, "node_modules")
+    if (fs.existsSync(modules)) {
+      for (const name of names()) {
+        const file = path.join(modules, name, "bin", bin)
+        if (fs.existsSync(file)) return file
+      }
+    }
+    const parent = path.dirname(current)
+    if (parent === current) return
+    current = parent
+  }
+}
+
+const resolved = find(dir)
+if (!resolved) {
+  console.error(
+    "It seems that your package manager failed to install the right version of the HolyCode CLI for your platform. You can try manually installing " +
+      names().map((name) => `\"${name}\"`).join(" or ") +
+      " package",
+  )
+  process.exit(1)
+}
+
+run(resolved)

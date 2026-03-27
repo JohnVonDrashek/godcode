@@ -10,7 +10,7 @@ export type TuiOptions = {
   config?: Config
 }
 
-export function createOpencodeTui(options?: TuiOptions) {
+export function createHolycodeTui(options?: TuiOptions) {
   const args = []
 
   if (options?.project) {
@@ -26,12 +26,12 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = spawn(`opencode`, args, {
+  const proc = spawn(`holycode`, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
+      HOLYCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
     },
   })
 

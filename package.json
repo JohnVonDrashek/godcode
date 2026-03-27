@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "opencode",
+  "name": "holycode",
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.11",
   "scripts": {
-    "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+    "dev": "bun run --cwd packages/holycode --conditions=browser src/index.ts",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
@@ -24,7 +24,6 @@
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
-      "@kobalte/core": "0.13.11",
       "@types/luxon": "3.7.1",
       "@types/node": "22.13.9",
       "@types/semver": "7.7.1",
@@ -34,9 +33,7 @@
       "@openauthjs/openauth": "0.0.0-20250322224806",
       "@pierre/diffs": "1.1.0-beta.18",
       "@solid-primitives/storage": "4.3.3",
-      "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
-      "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
       "effect": "4.0.0-beta.35",
@@ -46,22 +43,12 @@
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
       "marked": "17.0.1",
-      "marked-shiki": "1.2.1",
       "@playwright/test": "1.51.0",
       "typescript": "5.8.2",
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",
       "remeda": "2.26.0",
-      "shiki": "3.20.0",
-      "solid-list": "0.3.0",
-      "tailwindcss": "4.1.11",
-      "virtua": "0.42.3",
-      "vite": "7.1.4",
-      "@solidjs/meta": "0.29.4",
-      "@solidjs/router": "0.15.4",
-      "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
-      "solid-js": "1.9.10",
-      "vite-plugin-solid": "2.11.10"
+      "solid-js": "1.9.10"
     }
   },
   "devDependencies": {
@@ -77,14 +64,14 @@
     "turbo": "2.8.13"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@crusadesoft/plugin": "workspace:*",
+    "@crusadesoft/script": "workspace:*",
+    "@crusadesoft/sdk": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/crusadesoft/holycode"
   },
   "license": "MIT",
   "prettier": {

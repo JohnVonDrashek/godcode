@@ -2,10 +2,10 @@ export * from "./gen/types.gen.js"
 
 import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
-import { OpencodeClient } from "./gen/sdk.gen.js"
-export { type Config as OpencodeClientConfig, OpencodeClient }
+import { HolycodeClient } from "./gen/sdk.gen.js"
+export { type Config as HolycodeClientConfig, HolycodeClient }
 
-export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
+export function createHolycodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       // @ts-ignore
@@ -23,17 +23,17 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
     const encodedDirectory = isNonASCII ? encodeURIComponent(config.directory) : config.directory
     config.headers = {
       ...config.headers,
-      "x-opencode-directory": encodedDirectory,
+      "x-holycode-directory": encodedDirectory,
     }
   }
 
   if (config?.experimental_workspaceID) {
     config.headers = {
       ...config.headers,
-      "x-opencode-workspace": config.experimental_workspaceID,
+      "x-holycode-workspace": config.experimental_workspaceID,
     }
   }
 
   const client = createClient(config)
-  return new OpencodeClient({ client })
+  return new HolycodeClient({ client })
 }
