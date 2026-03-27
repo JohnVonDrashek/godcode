@@ -146,12 +146,7 @@ try {
   const repoData = await fetchRepo()
   session = await client.session.create<true>().then((r) => r.data)
   await subscribeSessionEvents()
-  shareId = await (async () => {
-    if (useEnvShare() === false) return
-    if (!useEnvShare() && repoData.data.private) return
-    await client.session.share<true>({ path: session })
-    return session.id.slice(-8)
-  })()
+  shareId = undefined
   console.log("opencode session", session.id)
   if (shareId) {
     console.log("Share link:", `${useShareUrl()}/s/${shareId}`)

@@ -8,7 +8,6 @@ import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
-import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
 
 await Log.init({
@@ -37,8 +36,6 @@ GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)
 })
 
-let server: Awaited<ReturnType<typeof Server.listen>> | undefined
-
 const eventStream = {
   abort: undefined as AbortController | undefined,
 }
@@ -50,10 +47,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
   const signal = abort.signal
 
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init)
-    const auth = getAuthorizationHeader()
-    if (auth) request.headers.set("Authorization", auth)
-    return Server.Default().fetch(request)
+    return Server.Default().fetch(new Request(input, init))
   }) as typeof globalThis.fetch
 
   const sdk = createOpencodeClient({
@@ -99,14 +93,9 @@ startEventStream({ directory: process.cwd() })
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
-    const headers = { ...input.headers }
-    const auth = getAuthorizationHeader()
-    if (auth && !headers["authorization"] && !headers["Authorization"]) {
-      headers["Authorization"] = auth
-    }
     const request = new Request(input.url, {
       method: input.method,
-      headers,
+      headers: input.headers,
       body: input.body,
     })
     const response = await Server.Default().fetch(request)
@@ -116,11 +105,6 @@ export const rpc = {
       headers: Object.fromEntries(response.headers.entries()),
       body,
     }
-  },
-  async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
-    if (server) await server.stop(true)
-    server = await Server.listen(input)
-    return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
@@ -142,15 +126,7 @@ export const rpc = {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
-    if (server) await server.stop(true)
   },
 }
 
 Rpc.listen(rpc)
-
-function getAuthorizationHeader(): string | undefined {
-  const password = Flag.OPENCODE_SERVER_PASSWORD
-  if (!password) return undefined
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-  return `Basic ${btoa(`${username}:${password}`)}`
-}

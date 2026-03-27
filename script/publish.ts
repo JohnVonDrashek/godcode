@@ -3,7 +3,6 @@
 import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
-
 const highlightsTemplate = `
 <!--
 Add highlights before publishing. Delete this section if no highlights.
@@ -46,13 +45,6 @@ for (const file of pkgjsons) {
   console.log("updated:", file)
   await Bun.file(file).write(pkg)
 }
-
-const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
-let toml = await Bun.file(extensionToml).text()
-toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-console.log("updated:", extensionToml)
-await Bun.file(extensionToml).write(toml)
 
 await $`bun install`
 await import(`../packages/sdk/js/script/build.ts`)

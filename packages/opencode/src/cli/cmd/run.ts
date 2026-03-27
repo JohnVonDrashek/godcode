@@ -3,7 +3,6 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
@@ -271,10 +270,6 @@ export const RunCommand = cmd({
         describe: "fork the session before continuing (requires --continue or --session)",
         type: "boolean",
       })
-      .option("share", {
-        type: "boolean",
-        describe: "share the session",
-      })
       .option("model", {
         type: "string",
         alias: ["m"],
@@ -300,22 +295,9 @@ export const RunCommand = cmd({
         type: "string",
         describe: "title for the session (uses truncated prompt if no value provided)",
       })
-      .option("attach", {
-        type: "string",
-        describe: "attach to a running holycode server (e.g., http://localhost:4096)",
-      })
-      .option("password", {
-        alias: ["p"],
-        type: "string",
-        describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
-      })
       .option("dir", {
         type: "string",
-        describe: "directory to run in, path on remote server if attaching",
-      })
-      .option("port", {
-        type: "number",
-        describe: "port for the local server (defaults to random port if no value provided)",
+        describe: "directory to run in",
       })
       .option("variant", {
         type: "string",
@@ -334,7 +316,6 @@ export const RunCommand = cmd({
 
     const directory = (() => {
       if (!args.dir) return undefined
-      if (args.attach) return args.dir
       try {
         process.chdir(args.dir)
         return process.cwd()
@@ -420,21 +401,6 @@ export const RunCommand = cmd({
       const name = title()
       const result = await sdk.session.create({ title: name, permission: rules })
       return result.data?.id
-    }
-
-    async function share(sdk: OpencodeClient, sessionID: string) {
-      const cfg = await sdk.config.get()
-      if (!cfg.data) return
-      if (cfg.data.share !== "auto" && !Flag.OPENCODE_AUTO_SHARE && !args.share) return
-      const res = await sdk.session.share({ sessionID }).catch((error) => {
-        if (error instanceof Error && error.message.includes("disabled")) {
-          UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
-        }
-        return { error }
-      })
-      if (!res.error && "data" in res && res.data?.share?.url) {
-        UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + res.data.share.url)
-      }
     }
 
     async function execute(sdk: OpencodeClient) {
@@ -664,44 +630,6 @@ export const RunCommand = cmd({
       const agent = await (async () => {
         if (!args.agent) return undefined
 
-        // When attaching, validate against the running server instead of local Instance state.
-        if (args.attach) {
-          const modes = await sdk.app
-            .agents(undefined, { throwOnError: true })
-            .then((x) => x.data ?? [])
-            .catch(() => undefined)
-
-          if (!modes) {
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL,
-              `failed to list agents from ${args.attach}. Falling back to default agent`,
-            )
-            return undefined
-          }
-
-          const agent = modes.find((a) => a.name === args.agent)
-          if (!agent) {
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL,
-              `agent "${args.agent}" not found. Falling back to default agent`,
-            )
-            return undefined
-          }
-
-          if (agent.mode === "subagent") {
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL,
-              `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
-            )
-            return undefined
-          }
-
-          return args.agent
-        }
-
         const entry = await Agent.get(args.agent)
         if (!entry) {
           UI.println(
@@ -727,8 +655,6 @@ export const RunCommand = cmd({
         UI.error("Session not found")
         process.exit(1)
       }
-      await share(sdk, sessionID)
-
       loop().catch((e) => {
         console.error(e)
         process.exit(1)
@@ -753,18 +679,6 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
-    }
-
-    if (args.attach) {
-      const headers = (() => {
-        const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const username = process.env.OPENCODE_SERVER_USERNAME ?? "holycode"
-        const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-        return { Authorization: auth }
-      })()
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
-      return await execute(sdk)
     }
 
     await bootstrap(process.env.OPENCODE_CWD || process.cwd(), async () => {

@@ -556,12 +556,7 @@ export const GithubRunCommand = cmd({
           ],
         })
         subscribeSessionEvents()
-        shareId = await (async () => {
-          if (share === false) return
-          if (!share && repoData.data.private) return
-          await Session.share(session.id)
-          return session.id.slice(-8)
-        })()
+        shareId = undefined
         console.log("opencode session", session.id)
 
         // Handle event types:

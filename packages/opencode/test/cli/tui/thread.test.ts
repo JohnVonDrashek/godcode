@@ -54,15 +54,6 @@ mock.module("@/util/timeout", () => ({
   withTimeout: <T>(input: Promise<T>) => input,
 }))
 
-mock.module("@/cli/network", () => ({
-  withNetworkOptions: <T>(input: T) => input,
-  resolveNetworkOptions: async () => ({
-    mdns: false,
-    port: 0,
-    hostname: "127.0.0.1",
-  }),
-}))
-
 mock.module("../../../src/cli/cmd/tui/win32", () => ({
   win32DisableProcessedInput: () => {},
   win32InstallCtrlCGuard: () => undefined,
@@ -96,12 +87,6 @@ describe("tui thread", () => {
       session: undefined,
       continue: false,
       fork: false,
-      port: 0,
-      hostname: "127.0.0.1",
-      mdns: false,
-      "mdns-domain": "opencode.local",
-      mdnsDomain: "opencode.local",
-      cors: [],
     }
     return TuiThreadCommand.handler(args)
   }

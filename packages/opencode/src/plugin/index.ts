@@ -5,7 +5,6 @@ import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
-import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
@@ -61,11 +60,6 @@ export namespace Plugin {
             const client = createOpencodeClient({
               baseUrl: "http://localhost:4096",
               directory: ctx.directory,
-              headers: Flag.OPENCODE_SERVER_PASSWORD
-                ? {
-                    Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
-                  }
-                : undefined,
               fetch: async (...args) => Server.Default().fetch(...args),
             })
             const cfg = await Config.get()
@@ -75,7 +69,7 @@ export namespace Plugin {
               worktree: ctx.worktree,
               directory: ctx.directory,
               get serverUrl(): URL {
-                return Server.url ?? new URL("http://localhost:4096")
+                return new URL("http://localhost:4096")
               },
               $: Bun.$,
             }

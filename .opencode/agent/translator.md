@@ -331,13 +331,9 @@ ZenMux
 opencode
 opencode [project]
 opencode /path/to/project
-opencode acp
 opencode agent [command]
 opencode agent create
 opencode agent list
-opencode attach [url]
-opencode attach http://10.20.30.40:4096
-opencode attach http://localhost:4096
 opencode auth [command]
 opencode auth list
 opencode auth login
@@ -348,7 +344,6 @@ opencode github [command]
 opencode github install
 opencode github run
 opencode import <file>
-opencode import https://opncd.ai/s/abc123
 opencode import session.json
 opencode mcp [command]
 opencode mcp add
@@ -368,10 +363,6 @@ opencode models [provider]
 opencode models anthropic
 opencode run [message..]
 opencode run Explain the use of context in Go
-opencode serve
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
-opencode serve --hostname 0.0.0.0 --port 4096
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 opencode session [command]
 opencode session list
 opencode session delete <sessionID>
@@ -380,14 +371,6 @@ opencode uninstall
 opencode upgrade
 opencode upgrade [target]
 opencode upgrade v0.1.48
-opencode web
-opencode web --cors https://example.com
-opencode web --hostname 0.0.0.0
-opencode web --mdns
-opencode web --mdns --mdns-domain myproject.local
-opencode web --port 4096
-opencode web --port 4096 --hostname 0.0.0.0
-opencode.server.close()
 ```
 
 ## Slash commands and routes
@@ -401,7 +384,6 @@ opencode.server.close()
 /config/providers
 /connect
 /continue
-/doc
 /editor
 /event
 /experimental/tool?provider=<p>&model=<m>
@@ -453,13 +435,11 @@ opencode.server.close()
 /session/:id/permissions/:permissionID
 /session/:id/prompt_async
 /session/:id/revert
-/session/:id/share
 /session/:id/shell
 /session/:id/summarize
 /session/:id/todo
 /session/:id/unrevert
 /session/status
-/share
 /summarize
 /theme
 /tui
@@ -484,10 +464,8 @@ opencode.server.close()
 
 ```text
 --agent
---attach
 --command
 --continue
---cors
 --cwd
 --days
 --dir
@@ -498,14 +476,10 @@ opencode.server.close()
 --fork
 --format
 --help
---hostname
---hostname 0.0.0.0
 --keep-config
 --keep-data
 --log-level
 --max-count
---mdns
---mdns-domain
 --method
 --model
 --models
@@ -515,7 +489,6 @@ opencode.server.close()
 --prompt
 --refresh
 --session
---share
 --title
 --token
 --tools
@@ -583,7 +556,6 @@ NPM_AUTH_TOKEN
 OC_ALLOW_WAYLAND
 OPENCODE_API_KEY
 OPENCODE_AUTH_JSON
-OPENCODE_AUTO_SHARE
 OPENCODE_CLIENT
 OPENCODE_CONFIG
 OPENCODE_CONFIG_CONTENT
@@ -621,8 +593,6 @@ OPENCODE_MODEL
 OPENCODE_MODELS_URL
 OPENCODE_PERMISSION
 OPENCODE_PORT
-OPENCODE_SERVER_PASSWORD
-OPENCODE_SERVER_USERNAME
 PROJECT_ROOT
 RESOURCE_NAME
 RUST_LOG
@@ -813,7 +783,6 @@ http://<wsl-ip>:4096
 http://127.0.0.1:8080/callback
 http://localhost:<port>
 http://localhost:4096
-http://localhost:4096/doc
 https://app.example.com
 https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/
 https://opencode.ai/zen/v1/chat/completions

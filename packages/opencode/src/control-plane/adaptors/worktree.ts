@@ -1,3 +1,9 @@
+import { Hono } from "hono"
+import { Instance } from "@/project/instance"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { SessionRoutes } from "@/server/routes/session"
+import { WorkspaceContext } from "../workspace-context"
+import { WorkspaceID } from "../schema"
 import z from "zod"
 import { Worktree } from "@/worktree"
 import { type Adaptor, WorkspaceInfo } from "../types"
@@ -9,6 +15,8 @@ const Config = WorkspaceInfo.extend({
 })
 
 type Config = z.infer<typeof Config>
+
+const app = new Hono().route("/session", SessionRoutes())
 
 export const WorktreeAdaptor: Adaptor = {
   async configure(info) {
@@ -35,12 +43,18 @@ export const WorktreeAdaptor: Adaptor = {
   },
   async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
     const config = Config.parse(info)
-    const { WorkspaceServer } = await import("../workspace-server/server")
     const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-    headers.set("x-opencode-directory", config.directory)
-
-    const request = new Request(url, { ...init, headers })
-    return WorkspaceServer.App().fetch(request)
+    return WorkspaceContext.provide({
+      workspaceID: WorkspaceID.make(config.id),
+      async fn() {
+        return Instance.provide({
+          directory: config.directory,
+          init: InstanceBootstrap,
+          async fn() {
+            return app.fetch(new Request(url, init))
+          },
+        })
+      },
+    })
   },
 }
