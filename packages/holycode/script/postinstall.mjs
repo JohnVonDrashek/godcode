@@ -9,6 +9,18 @@ import { createRequire } from "module"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
+function prefix() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"))
+    if (typeof pkg.name !== "string") return ""
+    const idx = pkg.name.indexOf("/")
+    if (!pkg.name.startsWith("@") || idx === -1) return ""
+    return pkg.name.slice(0, idx + 1)
+  } catch {
+    return ""
+  }
+}
+
 function detectPlatformAndArch() {
   // Map platform names
   let platform
@@ -49,7 +61,7 @@ function detectPlatformAndArch() {
 
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `holycode-${platform}-${arch}`
+  const packageName = `${prefix()}holycode-${platform}-${arch}`
   const binaryName = platform === "windows" ? "holycode.exe" : "holycode"
 
   try {
