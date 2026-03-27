@@ -54,6 +54,7 @@ const name = target ?? pkg.name + "-ai"
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
+await $`cp -r ./src/dot-opencode ./dist/${pkg.name}/bin/dot-opencode`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 

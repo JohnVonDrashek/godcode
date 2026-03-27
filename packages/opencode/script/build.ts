@@ -164,6 +164,9 @@ for (const item of targets) {
     .join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
+  await fs.promises.cp(path.join(dir, "src/dot-opencode"), path.join(dir, "dist", name, "bin", "dot-opencode"), {
+    recursive: true,
+  })
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")

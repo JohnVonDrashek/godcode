@@ -86,7 +86,7 @@ export namespace ToolRegistry {
           }
 
           yield* Effect.promise(async () => {
-            const matches = await Config.directories().then((dirs) =>
+            const matches = await Config.contentDirectories().then((dirs) =>
               dirs.flatMap((dir) =>
                 Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
               ),

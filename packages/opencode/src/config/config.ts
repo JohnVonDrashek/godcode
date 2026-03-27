@@ -28,6 +28,7 @@ import { ConfigMarkdown } from "./markdown"
 import { constants, existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
+import { DotOpencode } from "@/dot-opencode"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
 import { PackageRegistry } from "@/bun/registry"
@@ -133,6 +134,7 @@ export namespace Config {
     result.plugin = result.plugin || []
 
     const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
+    const content = [DotOpencode.root(), ...directories]
 
     // .holycode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
@@ -141,8 +143,8 @@ export namespace Config {
 
     const deps = []
 
-    for (const dir of unique(directories)) {
-      if (dir.endsWith(".holycode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+    for (const dir of unique(content)) {
+      if (dir !== DotOpencode.root() && (dir.endsWith(".holycode") || dir === Flag.OPENCODE_CONFIG_DIR)) {
         for (const file of ["holycode.jsonc", "holycode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
@@ -154,12 +156,14 @@ export namespace Config {
         result = mergeConfigConcatArrays(result, await loadTune(path.join(dir, "tune.json")))
       }
 
-      deps.push(
-        iife(async () => {
-          const shouldInstall = await needsInstall(dir)
-          if (shouldInstall) await installDependencies(dir)
-        }),
-      )
+      if (dir !== DotOpencode.root()) {
+        deps.push(
+          iife(async () => {
+            const shouldInstall = await needsInstall(dir)
+            if (shouldInstall) await installDependencies(dir)
+          }),
+        )
+      }
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent ?? {}, await loadAgent(dir))
@@ -1479,6 +1483,10 @@ export namespace Config {
 
   export async function directories() {
     return state().then((x) => x.directories)
+  }
+
+  export async function contentDirectories() {
+    return [DotOpencode.root(), ...(await directories())]
   }
 }
 Filesystem.write

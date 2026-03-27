@@ -12,6 +12,7 @@ import { makeRunPromise } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
+import { DotOpencode } from "@/dot-opencode"
 import { Filesystem } from "@/util/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
@@ -27,7 +28,7 @@ export namespace Skill {
   const SKILL_PATTERN = "**/SKILL.md"
   const REMOTE_ROOT = path.join(Global.Path.cache, "skills")
 
-  export const Kind = z.enum(["project", "global", "config", "remote"])
+  export const Kind = z.enum(["builtin", "project", "global", "config", "remote"])
   export type Kind = z.infer<typeof Kind>
 
   export const Info = z.object({
@@ -107,7 +108,7 @@ export namespace Skill {
       location: match,
       content: md.content,
       kind,
-      deletable: kind !== "remote",
+      deletable: kind !== "builtin" && kind !== "remote",
     }
   }
 
@@ -156,6 +157,8 @@ export namespace Skill {
     }
 
     const load = async () => {
+      await scan(state, DotOpencode.root(), "skills/**/SKILL.md", { kind: "builtin" })
+
       if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
         for (const dir of EXTERNAL_DIRS) {
           const root = path.join(Global.Path.home, dir)

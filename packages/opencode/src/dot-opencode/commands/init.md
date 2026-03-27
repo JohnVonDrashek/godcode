@@ -1,4 +1,9 @@
+---
+description: create/update AGENTS.md
+---
+
 Please analyze this codebase and create an AGENTS.md file containing:
+
 1. Build/lint/test commands - especially for running a single test
 2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
 

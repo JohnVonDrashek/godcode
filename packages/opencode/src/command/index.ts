@@ -8,8 +8,6 @@ import { Config } from "../config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import { Log } from "../util/log"
-import PROMPT_INITIALIZE from "./template/initialize.txt"
-import PROMPT_REVIEW from "./template/review.txt"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -65,6 +63,10 @@ export namespace Command {
     REVIEW: "review",
   } as const
 
+  function fill(text: string, dir: string) {
+    return text.replaceAll("${path}", dir)
+  }
+
   export interface Interface {
     readonly get: (name: string) => Effect.Effect<Info | undefined>
     readonly list: () => Effect.Effect<Info[]>
@@ -79,26 +81,6 @@ export namespace Command {
         const cfg = yield* Effect.promise(() => Config.get())
         const commands: Record<string, Info> = {}
 
-        commands[Default.INIT] = {
-          name: Default.INIT,
-          description: "create/update AGENTS.md",
-          source: "command",
-          get template() {
-            return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
-          },
-          hints: hints(PROMPT_INITIALIZE),
-        }
-        commands[Default.REVIEW] = {
-          name: Default.REVIEW,
-          description: "review changes [commit|branch|pr], defaults to uncommitted",
-          source: "command",
-          get template() {
-            return PROMPT_REVIEW.replace("${path}", ctx.worktree)
-          },
-          subtask: true,
-          hints: hints(PROMPT_REVIEW),
-        }
-
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
           commands[name] = {
             name,
@@ -107,7 +89,7 @@ export namespace Command {
             description: command.description,
             source: "command",
             get template() {
-              return command.template
+              return fill(command.template, ctx.worktree)
             },
             subtask: command.subtask,
             hints: hints(command.template),
