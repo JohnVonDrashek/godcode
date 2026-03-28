@@ -119,6 +119,12 @@ function themes(dir: string) {
 
 export const DEFAULT_THEMES = themes(DotHolycode.file("themes"))
 
+function pickTheme(all: Record<string, ThemeJson>) {
+  const keys = Object.keys(all)
+  if (keys.length === 0) return
+  return keys[Math.floor(Math.random() * keys.length)]
+}
+
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
@@ -233,11 +239,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       return
     }
     const lock = pick(kv.get("theme_mode_lock"))
+    const random = kv.get("theme_random") === true
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: lock ?? pick(kv.get("theme_mode", props.mode)) ?? props.mode,
       lock,
       active: (config.theme ?? kv.get("theme", "holycode")) as string,
+      random,
       ready: false,
     })
 
@@ -250,9 +258,16 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       resolveSystemTheme(store.mode)
       getCustomThemes()
         .then((custom) => {
+          const all = {
+            ...DEFAULT_THEMES,
+            ...custom,
+          }
           setStore(
             produce((draft) => {
-              Object.assign(draft.themes, custom)
+              draft.themes = all
+              if (!config.theme && draft.random) {
+                draft.active = pickTheme(all) ?? draft.active
+              }
             }),
           )
         })
@@ -370,6 +385,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       set(theme: string) {
         setStore("active", theme)
         kv.set("theme", theme)
+      },
+      random() {
+        return store.random
+      },
+      setRandom(next: boolean) {
+        setStore("random", next)
+        kv.set("theme_random", next)
       },
       get ready() {
         return store.ready
