@@ -60,6 +60,8 @@ import { DialogSkill } from "../dialog-skill"
 import { Tune } from "@/util/tune"
 import { DialogTune } from "../dialog-tune"
 import { writeAgentView } from "@tui/util/agent-view"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
+import { arm, owns, read as readAuto, ready, short as shortAuto } from "./auto"
 
 export type PromptProps = {
   sessionID?: string
@@ -254,6 +256,13 @@ export function Prompt(props: PromptProps) {
     return messages.findLast((m) => m.role === "user")
   })
 
+  const lastAssistantMessage = createMemo(() => {
+    if (!props.sessionID) return undefined
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return undefined
+    return messages.findLast((m) => m.role === "assistant")
+  })
+
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
@@ -282,6 +291,12 @@ export function Prompt(props: PromptProps) {
       map.set(item.name, item.source === "skill" ? "skill" : "command")
     }
     return map
+  })
+
+  const auto = createMemo(() => readAuto(kv.get("do_not_stop")))
+  const autoActive = createMemo(() => owns(auto(), props.sessionID))
+  const autoPanic = createMemo(() => {
+    return autoActive() && !store.prompt.input && store.mode === "normal" && !autocomplete.visible
   })
 
   function syncCommandExtmark() {
@@ -317,6 +332,54 @@ export function Prompt(props: PromptProps) {
       { defer: true },
     ),
   )
+
+  async function follow(text: string) {
+    if (!props.sessionID) return
+    const model = lastUserMessage()?.model ?? local.model.current()
+    if (!model) {
+      promptModelWarning()
+      return
+    }
+    await sdk.client.session
+      .prompt({
+        sessionID: props.sessionID,
+        messageID: MessageID.ascending(),
+        agent: lastUserMessage()?.agent ?? local.agent.current().name,
+        model,
+        variant: lastUserMessage()?.variant ?? local.model.variant.current(),
+        prompt: lastUserMessage()?.prompt ?? tunePrompt(),
+        parts: [
+          {
+            id: PartID.ascending(),
+            type: "text",
+            text,
+          },
+        ],
+      })
+      .catch(() => {})
+  }
+
+  createEffect(() => {
+    const item = auto()
+    const msg = lastAssistantMessage()
+    if (
+      !ready(item, {
+        sessionID: props.sessionID,
+        status: status().type,
+        messageID: msg?.id,
+        error: !!msg?.error,
+        completed: !!msg?.time.completed,
+      })
+    )
+      return
+    if (!item) return
+    const text = item.text
+    kv.set("do_not_stop", {
+      ...item,
+      last: msg!.id,
+    })
+    void follow(text)
+  })
 
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
@@ -386,7 +449,7 @@ export function Prompt(props: PromptProps) {
         keybind: "session_interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        enabled: status().type !== "idle" && !autoPanic(),
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
@@ -409,6 +472,85 @@ export function Prompt(props: PromptProps) {
             })
             setStore("interrupt", 0)
           }
+          dialog.clear()
+        },
+      },
+      {
+        title: autoActive() ? "Disable auto" : "Auto",
+        value: "prompt.auto",
+        category: "Prompt",
+        slash: {
+          name: "auto",
+        },
+        onSelect: (dialog, trigger) => {
+          const text = trigger?.args.trim()
+          const item = auto()
+          const active = autoActive()
+          if (text && ["off", "stop", "disable"].includes(text.toLowerCase())) {
+            kv.set("do_not_stop", undefined)
+            toast.show({
+              message: "auto disabled",
+              variant: "info",
+              duration: 2500,
+            })
+            dialog.clear()
+            return
+          }
+          if (!text) {
+            if (active) {
+              kv.set("do_not_stop", undefined)
+              toast.show({
+                message: "auto disabled",
+                variant: "info",
+                duration: 2500,
+              })
+              dialog.clear()
+              return
+            }
+            dialog.replace(() => (
+              <DialogPrompt
+                title="Auto"
+                value={item?.text}
+                placeholder="Continue making improvements"
+                onConfirm={(value) => {
+                  const next = value.trim()
+                  if (!next) {
+                    kv.set("do_not_stop", undefined)
+                    toast.show({
+                      message: "auto disabled",
+                      variant: "info",
+                      duration: 2500,
+                    })
+                    dialog.clear()
+                    return
+                  }
+                  kv.set("do_not_stop", {
+                    text: next,
+                    armed: false,
+                    ...(props.sessionID ? { sessionID: props.sessionID } : {}),
+                  })
+                  toast.show({
+                    message: `auto ready: ${shortAuto(next)}`,
+                    variant: "success",
+                    duration: 3000,
+                  })
+                  dialog.clear()
+                }}
+                onCancel={() => dialog.clear()}
+              />
+            ))
+            return
+          }
+          kv.set("do_not_stop", {
+            text,
+            armed: false,
+            ...(props.sessionID ? { sessionID: props.sessionID } : {}),
+          })
+          toast.show({
+            message: `auto ready: ${shortAuto(text)}`,
+            variant: "success",
+            duration: 3000,
+          })
           dialog.clear()
         },
       },
@@ -777,6 +919,7 @@ export function Prompt(props: PromptProps) {
     const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
     const [slashName, ...slashArgs] = firstLine.split(" ")
     const slashText = slashArgs.join(" ") + (firstLineEnd === -1 ? "" : "\n" + inputText.slice(firstLineEnd + 1))
+    let sent = false
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -789,6 +932,7 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+      sent = true
     } else if (
       inputText.startsWith("/") &&
       command.triggerSlash(slashName.slice(1), {
@@ -823,6 +967,7 @@ export function Prompt(props: PromptProps) {
             ...x,
           })),
       } as any)
+      sent = true
     } else {
       const shadowModelSelection = local.agent.current().name === "shadow" ? local.model.shadow.current() : undefined
       sdk.client.session
@@ -846,6 +991,11 @@ export function Prompt(props: PromptProps) {
           ],
         })
         .catch(() => {})
+      sent = true
+    }
+    if (sent) {
+      const item = auto()
+      if (item && owns(item, sessionID)) kv.set("do_not_stop", arm(item, sessionID))
     }
     history.append({
       ...store.prompt,
@@ -1188,6 +1338,18 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
+                if (e.name === "escape" && !e.defaultPrevented && !autocomplete.visible && autoPanic()) {
+                  esc = 0
+                  hint(false)
+                  kv.set("do_not_stop", undefined)
+                  toast.show({
+                    message: "auto disabled",
+                    variant: "info",
+                    duration: 2500,
+                  })
+                  e.preventDefault()
+                  return
+                }
                 if (
                   e.name === "escape" &&
                   !e.defaultPrevented &&
@@ -1354,6 +1516,11 @@ export function Prompt(props: PromptProps) {
                   <Show when={tuneActive()}>
                     <text fg={theme.textMuted}>·</text>
                     <text fg={theme.textMuted}>tuned</text>
+                  </Show>
+                  <Show when={autoActive()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.warning}>esc</text>
+                    <text fg={theme.textMuted}>disable auto</text>
                   </Show>
                 </box>
               </Show>
