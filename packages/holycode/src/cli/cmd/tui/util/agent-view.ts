@@ -1,3 +1,8 @@
+import path from "path"
+import type { CliRenderer } from "@opentui/core"
+import { Filesystem } from "@/util/filesystem"
+import { Editor } from "./editor"
+
 type View = {
   providerID: string
   modelID: string
@@ -97,4 +102,23 @@ export function formatAgentView(input: View, filepath: string) {
   ]
 
   return parts.join("\n\n") + "\n"
+}
+
+export async function writeAgentView(input: View, opts: { root?: string; renderer?: CliRenderer }) {
+  if (!opts.root) throw new Error("Project path is unavailable")
+
+  const dir = path.join(opts.root, ".holycode", "agent-view")
+  const base = `${Date.now()}`
+  const file = path.join(dir, `${base}.json`)
+  const view = path.join(dir, `${base}.md`)
+
+  await Filesystem.write(file, JSON.stringify(input, null, 2))
+  await Filesystem.write(view, formatAgentView(input, file))
+
+  if (opts.renderer) {
+    const edited = await Editor.open({ value: await Filesystem.readText(view), renderer: opts.renderer })
+    if (edited !== undefined) await Filesystem.write(view, edited)
+  }
+
+  return view
 }

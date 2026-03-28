@@ -59,7 +59,7 @@ import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { Tune } from "@/util/tune"
 import { DialogTune } from "../dialog-tune"
-import { formatAgentView } from "@tui/util/agent-view"
+import { writeAgentView } from "@tui/util/agent-view"
 
 export type PromptProps = {
   sessionID?: string
@@ -179,22 +179,21 @@ export function Prompt(props: PromptProps) {
       return
     }
 
-    const root = sync.data.path.worktree || sync.data.path.directory
-    const dir = path.join(root, ".holycode", "agent-view")
-    const base = `${Date.now()}`
-    const file = path.join(dir, `${base}.json`)
-    const view = path.join(dir, `${base}.md`)
-    const json = JSON.stringify(result.data, null, 2)
-    await Filesystem.write(file, json)
-    await Filesystem.write(view, formatAgentView(result.data, file))
-    const edited = await Editor.open({ value: await Filesystem.readText(view), renderer })
-    if (edited !== undefined) {
-      await Filesystem.write(view, edited)
+    try {
+      const view = await writeAgentView(result.data, {
+        root: sync.data.path.worktree || sync.data.path.directory,
+        renderer,
+      })
+      toast.show({
+        message: `Agent view exported to ${view}`,
+        variant: "success",
+      })
+    } catch (err) {
+      toast.show({
+        message: err instanceof Error ? `Failed to export agent view: ${err.message}` : "Failed to export agent view",
+        variant: "error",
+      })
     }
-    toast.show({
-      message: `Agent view exported to ${view}`,
-      variant: "success",
-    })
   }
 
   const textareaKeybindings = useTextareaKeybindings()
