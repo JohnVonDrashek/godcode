@@ -1,5 +1,7 @@
 # HolyCode
 
+<img width="721" height="546" alt="Screenshot 2026-03-28 at 7 17 13 PM" src="https://github.com/user-attachments/assets/f0e6327f-97a0-4a86-a063-6a16d7b85c5a" />
+
 Terminal-first coding agent for real projects.
 
 HolyCode is CrusadeSoft's public fork of OpenCode, focused on an interactive terminal workflow plus scriptable one-shot runs.
